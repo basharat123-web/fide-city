@@ -974,19 +974,21 @@ table.data tr:last-child td, table.data tr:last-child th { border-bottom: 0; }
   position: fixed;
   inset: 0;
   background: rgba(16, 1, 31, 0.84);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
   z-index: 9999;
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0;
   visibility: hidden;
+  pointer-events: none;
   transition: opacity 0.25s ease, visibility 0.25s ease;
 }
 .fc-loader-overlay.is-active {
   opacity: 1;
   visibility: visible;
+  pointer-events: auto;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 .fc-loader-card {
   display: flex;

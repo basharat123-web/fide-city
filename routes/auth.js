@@ -373,8 +373,12 @@ post('/account/avatar', requireUser, async (ctx) => {
   ctx.user.avatar = avatar || null;
 
   if (config.supabase && config.supabase.enabled) {
-    const { updateUserAvatar } = require('../lib/supabase');
-    await updateUserAvatar(ctx.user.id, avatar || null);
+    try {
+      const { saveUser } = require('../lib/supabase');
+      // Load full user (with password_hash etc.) and push to Supabase so avatar survives Vercel redeploys.
+      const fullUser = db.prepare('SELECT * FROM users WHERE id = ?').get(ctx.user.id);
+      if (fullUser) await saveUser(fullUser);
+    } catch (_) { /* non-fatal – avatar is already saved locally */ }
   }
 
   audit(ctx.user.id, isRemove ? 'avatar_removed' : 'avatar_updated', '', ctx.ip);

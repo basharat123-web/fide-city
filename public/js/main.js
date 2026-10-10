@@ -4,6 +4,22 @@
   'use strict';
   document.documentElement.classList.add('js');
 
+  /* bfcache safety: always reset loader state when page is shown (back/forward navigation) */
+  window.addEventListener('pageshow', function (e) {
+    if (e.persisted) {
+      var gl = document.getElementById('fc-global-loader');
+      var tl = document.getElementById('top-loader');
+      if (gl) gl.classList.remove('is-active');
+      if (tl) tl.classList.remove('active', 'complete');
+      // Re-enable any loading buttons
+      document.querySelectorAll('.btn.is-loading').forEach(function (b) {
+        b.classList.remove('is-loading');
+        var sp = b.querySelector('.btn-spinner');
+        if (sp) sp.remove();
+      });
+    }
+  });
+
   /* Mobile menu */
   var btn = document.querySelector('[data-menu]');
   var nav = document.getElementById('nav');
