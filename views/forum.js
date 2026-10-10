@@ -122,7 +122,9 @@ function thread(ctx, { t, cat, posts, pageNo, pages, canReply, errors = {}, draf
       ${posts.map(
         (p, i) => html`<li class="post" id="post-${p.id}">
           <aside class="post-author">
-            <span class="avatar" aria-hidden="true">${p.username.slice(0, 1).toUpperCase()}</span>
+            ${p.avatar
+              ? html`<img class="avatar" src="${p.avatar}" alt="${p.username}" style="object-fit: cover;">`
+              : html`<span class="avatar" aria-hidden="true">${p.username.slice(0, 1).toUpperCase()}</span>`}
             <strong>${p.username}</strong>
             ${roleBadge(p)}
           </aside>

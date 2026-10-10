@@ -30,7 +30,7 @@ const q = {
   postCount: db.prepare('SELECT COUNT(*) AS n FROM posts WHERE thread_id = ? AND deleted = 0'),
   firstPost: db.prepare('SELECT MIN(id) AS id FROM posts WHERE thread_id = ?'),
   posts: db.prepare(`
-    SELECT p.*, u.username, u.role, u.staff_title FROM posts p JOIN users u ON u.id = p.user_id
+    SELECT p.*, u.username, u.role, u.staff_title, u.avatar FROM posts p JOIN users u ON u.id = p.user_id
     WHERE p.thread_id = ? AND p.deleted = 0 ORDER BY p.id LIMIT ? OFFSET ?`),
   lastPostBy: db.prepare('SELECT body, created_at FROM posts WHERE user_id = ? ORDER BY id DESC LIMIT 1'),
   insThread: db.prepare('INSERT INTO threads (category_id, user_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'),

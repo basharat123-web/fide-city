@@ -201,6 +201,44 @@ async function main() {
       check('published news is listed and escaped', news.text.includes('Grand opening &lt;3'));
       const audit = await adm.get('/admin?tab=audit');
       check('security log records bans and logins', /user_ban/.test(audit.text) && /login/.test(audit.text));
+
+      console.log('\nAvatar and Profile Picture');
+      const acc = await adm.get('/account');
+      check('account page loads', acc.status === 200);
+      const avRes = await adm.post('/account/avatar', {
+        _csrf: adm.csrf(acc.text),
+        avatar_url: 'https://example.com/avatar.png',
+      });
+      check('avatar updates successfully (303)', avRes.status === 303);
+      const updatedUser = db.prepare("SELECT avatar FROM users WHERE username = 'boss'").get();
+      check('avatar persisted in database', updatedUser && updatedUser.avatar === 'https://example.com/avatar.png');
+
+      console.log('\nForgot Password and OTP Verification');
+      const fpGet = await anon.get('/forgot-password');
+      check('forgot-password page loads (200)', fpGet.status === 200);
+      const fpPost = await anon.post('/forgot-password', {
+        _csrf: anon.csrf(fpGet.text),
+        ident: 'boss@example.com',
+      });
+      check('forgot-password sends OTP and redirects to reset page', fpPost.status === 303);
+      const otpRow = db.prepare("SELECT otp FROM password_resets WHERE user_id = (SELECT id FROM users WHERE username = 'boss') ORDER BY id DESC LIMIT 1").get();
+      check('6-digit OTP code generated', otpRow && /^[0-9]{6}$/.test(otpRow.otp));
+
+      const rpGet = await anon.get('/reset-password');
+      check('reset-password page loads (200)', rpGet.status === 200);
+      const rpPost = await anon.post('/reset-password', {
+        _csrf: anon.csrf(rpGet.text),
+        ident: 'boss@example.com',
+        otp: otpRow.otp,
+        password: 'New-Secure-Password-2026!',
+        confirm: 'New-Secure-Password-2026!',
+      });
+      check('reset-password succeeds with valid OTP (303)', rpPost.status === 303);
+
+      console.log('\nRole clamping protection');
+      const { getRoleMeta } = require('../lib/roles');
+      const meta = getRoleMeta({ username: 'Daniyal', email: 'daniyalhussain299@gmail.com', role: 'admin', staff_title: 'Project Management' });
+      check('non-root user cannot have Project Management role badge', meta.name === 'Chief Administrator' && meta.systemRole === 'admin');
     }
 
     console.log('\nRate limiting');

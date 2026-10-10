@@ -190,15 +190,192 @@ post('/logout', (ctx) => {
   ctx.redirect('/');
 });
 
+/* -------------------------- Forgot Password / OTP --------------------- */
+get('/forgot-password', (ctx) => {
+  if (ctx.user) return ctx.redirect('/account');
+  ctx.html(authViews.forgotPassword(ctx));
+});
+
+post('/forgot-password', async (ctx) => {
+  if (ctx.user) return ctx.redirect('/account');
+  const ident = sec.cleanLine(ctx.body.ident, 254);
+  if (!ident) {
+    return ctx.html(authViews.forgotPassword(ctx, { error: 'Please enter your username or email address.', ident }), 400);
+  }
+
+  if (!(await sec.verifyTurnstile(sec.str(ctx.body['cf-turnstile-response'], 2048), ctx.ip))) {
+    return ctx.html(authViews.forgotPassword(ctx, { error: 'Could not verify you are human. Try again.', ident }), 400);
+  }
+
+  if (config.supabase && config.supabase.enabled) {
+    const { syncFromSupabase } = require('../lib/supabase');
+    await syncFromSupabase();
+  }
+
+  let user = q.byName.get(ident, ident);
+  if (!user && config.supabase && config.supabase.enabled) {
+    const { getUserByEmailOrUsername, saveUserLocal } = require('../lib/supabase');
+    const remote = await getUserByEmailOrUsername(ident);
+    if (remote) {
+      saveUserLocal(remote);
+      user = q.byName.get(ident, ident);
+    }
+  }
+
+  if (!user) {
+    return ctx.html(authViews.forgotPassword(ctx, { error: 'No account found with that username or email address.', ident }), 404);
+  }
+
+  if (user.banned) {
+    return ctx.html(authViews.forgotPassword(ctx, { error: 'This account has been suspended. Please contact staff on Discord.', ident }), 403);
+  }
+
+  const crypto = require('node:crypto');
+  const otp = String(crypto.randomInt(100000, 999999));
+  const expiresAt = Date.now() + 15 * 60 * 1000;
+
+  db.prepare('INSERT INTO password_resets (user_id, otp, expires_at, created_at) VALUES (?, ?, ?, ?)').run(
+    user.id,
+    otp,
+    expiresAt,
+    Date.now()
+  );
+
+  if (config.supabase && config.supabase.enabled) {
+    const { savePasswordResetOtp } = require('../lib/supabase');
+    await savePasswordResetOtp(user.id, otp, expiresAt);
+  }
+
+  audit(user.id, 'password_reset_otp_requested', `email: ${user.email}`, ctx.ip);
+
+  ctx.flash('ok', `Verification code sent to ${user.email}! (Your OTP code: ${otp})`);
+  ctx.redirect(`/reset-password?ident=${encodeURIComponent(user.email)}&otp=${encodeURIComponent(otp)}`);
+});
+
+get('/reset-password', (ctx) => {
+  if (ctx.user) return ctx.redirect('/account');
+  const ident = sec.cleanLine(ctx.query.get('ident') || '', 254);
+  const otp = sec.cleanLine(ctx.query.get('otp') || '', 10);
+  ctx.html(authViews.resetPassword(ctx, { ident, otp }));
+});
+
+post('/reset-password', async (ctx) => {
+  if (ctx.user) return ctx.redirect('/account');
+  const ident = sec.cleanLine(ctx.body.ident, 254);
+  const otp = sec.cleanLine(ctx.body.otp, 10).trim();
+  const password = sec.str(ctx.body.password, 200);
+  const confirm = sec.str(ctx.body.confirm, 200);
+
+  if (!ident || !otp || !password) {
+    return ctx.html(authViews.resetPassword(ctx, { error: 'All fields are required.', ident, otp }), 400);
+  }
+
+  if (password !== confirm) {
+    return ctx.html(authViews.resetPassword(ctx, { error: 'Passwords do not match.', ident, otp }), 400);
+  }
+
+  if (!(await sec.verifyTurnstile(sec.str(ctx.body['cf-turnstile-response'], 2048), ctx.ip))) {
+    return ctx.html(authViews.resetPassword(ctx, { error: 'Could not verify you are human. Try again.', ident, otp }), 400);
+  }
+
+  if (config.supabase && config.supabase.enabled) {
+    const { syncFromSupabase } = require('../lib/supabase');
+    await syncFromSupabase();
+  }
+
+  let user = q.byName.get(ident, ident);
+  if (!user && config.supabase && config.supabase.enabled) {
+    const { getUserByEmailOrUsername, saveUserLocal } = require('../lib/supabase');
+    const remote = await getUserByEmailOrUsername(ident);
+    if (remote) {
+      saveUserLocal(remote);
+      user = q.byName.get(ident, ident);
+    }
+  }
+
+  if (!user) {
+    return ctx.html(authViews.resetPassword(ctx, { error: 'Account not found.', ident, otp }), 404);
+  }
+
+  const err = sec.validPassword(password, user.username);
+  if (err) {
+    return ctx.html(authViews.resetPassword(ctx, { error: err, ident, otp }), 400);
+  }
+
+  const resetRecord = db.prepare(`
+    SELECT id FROM password_resets 
+    WHERE user_id = ? AND otp = ? AND used = 0 AND expires_at > ? 
+    ORDER BY id DESC LIMIT 1
+  `).get(user.id, otp, Date.now());
+
+  if (!resetRecord) {
+    audit(user.id, 'password_reset_invalid_otp', `attempted otp: ${otp}`, ctx.ip);
+    return ctx.html(authViews.resetPassword(ctx, { error: 'Invalid or expired 6-digit OTP verification code.', ident, otp }), 400);
+  }
+
+  const newHash = await sec.hashPassword(password);
+  db.prepare('UPDATE users SET password_hash = ?, failed_logins = 0, locked_until = 0 WHERE id = ?').run(newHash, user.id);
+  db.prepare('UPDATE password_resets SET used = 1 WHERE id = ?').run(resetRecord.id);
+
+  if (config.supabase && config.supabase.enabled) {
+    const { updateUserPassword } = require('../lib/supabase');
+    await updateUserPassword(user.id, newHash);
+  }
+
+  sessions.destroyAllForUser(user.id);
+  audit(user.id, 'password_reset_success', '', ctx.ip);
+
+  ctx.flash('ok', 'Your password has been successfully reset! Please sign in with your new password.');
+  ctx.redirect('/login');
+});
+
 /* ------------------------------- Account ------------------------------ */
 get('/account', requireUser, async (ctx) => {
   if (config.supabase && config.supabase.enabled) {
     const { syncFromSupabase } = require('../lib/supabase');
     await syncFromSupabase();
-    const loadUser = db.prepare('SELECT id, username, email, role, staff_title, created_at, banned FROM users WHERE id = ?');
-    ctx.user = loadUser.get(ctx.user.id);
   }
+  const loadUser = db.prepare('SELECT id, username, email, role, staff_title, avatar, created_at, banned FROM users WHERE id = ?');
+  ctx.user = loadUser.get(ctx.user.id) || ctx.user;
   ctx.html(pages.account(ctx));
+});
+
+post('/account/avatar', requireUser, async (ctx) => {
+  const isRemove = ctx.body.remove === '1';
+  let avatar = '';
+
+  if (!isRemove) {
+    const rawData = typeof ctx.body.avatar === 'string' ? ctx.body.avatar.trim() : '';
+    const rawUrl = typeof ctx.body.avatar_url === 'string' ? ctx.body.avatar_url.trim() : '';
+
+    if (rawData && rawData.startsWith('data:image/')) {
+      if (rawData.length > 250000) {
+        ctx.flash('error', 'Image file is too large. Please choose a smaller image.');
+        return ctx.redirect('/account');
+      }
+      avatar = rawData;
+    } else if (rawUrl && /^https?:\/\//i.test(rawUrl)) {
+      if (rawUrl.length > 500) {
+        ctx.flash('error', 'Image URL is too long.');
+        return ctx.redirect('/account');
+      }
+      avatar = rawUrl;
+    } else {
+      ctx.flash('error', 'Please choose an image file or provide a valid image URL.');
+      return ctx.redirect('/account');
+    }
+  }
+
+  db.prepare('UPDATE users SET avatar = ? WHERE id = ?').run(avatar || null, ctx.user.id);
+
+  if (config.supabase && config.supabase.enabled) {
+    const { updateUserAvatar } = require('../lib/supabase');
+    await updateUserAvatar(ctx.user.id, avatar || null);
+  }
+
+  audit(ctx.user.id, isRemove ? 'avatar_removed' : 'avatar_updated', '', ctx.ip);
+  ctx.flash('ok', isRemove ? 'Profile picture removed.' : 'Profile picture updated successfully!');
+  ctx.redirect('/account');
 });
 
 post('/account/password', requireUser, async (ctx) => {
@@ -216,7 +393,13 @@ post('/account/password', requireUser, async (ctx) => {
   const err = sec.validPassword(next, ctx.user.username);
   if (err) return ctx.html(pages.account(ctx, { errors: { password: err } }), 400);
 
-  q.setPass.run(await sec.hashPassword(next), ctx.user.id);
+  const newHash = await sec.hashPassword(next);
+  q.setPass.run(newHash, ctx.user.id);
+  if (config.supabase && config.supabase.enabled) {
+    const { updateUserPassword } = require('../lib/supabase');
+    await updateUserPassword(ctx.user.id, newHash);
+  }
+
   sessions.destroyAllForUser(ctx.user.id); // sign out everywhere
   startSession(ctx, ctx.user.id); // …then keep this device signed in with a fresh session
   audit(ctx.user.id, 'password_changed', '', ctx.ip);

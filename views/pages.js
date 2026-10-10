@@ -294,7 +294,7 @@ function team(ctx, { staff }) {
     <h2 class="sub-title">Staff on the forum</h2>
     ${staff.length
       ? html`<ul class="staff-list">
-          ${staff.map((s) => html`<li><span class="avatar" aria-hidden="true">${s.username.slice(0, 1).toUpperCase()}</span><div><strong>${s.username}</strong><span class="muted">${s.staff_title || (s.role === 'admin' ? 'Admin' : 'Moderator')}</span></div></li>`)}
+          ${staff.map((s) => html`<li>${s.avatar ? html`<img class="avatar" src="${s.avatar}" alt="${s.username}" style="object-fit: cover;">` : html`<span class="avatar" aria-hidden="true">${s.username.slice(0, 1).toUpperCase()}</span>`}<div><strong>${s.username}</strong><span class="muted">${s.staff_title || (s.role === 'admin' ? 'Admin' : 'Moderator')}</span></div></li>`)}
         </ul>`
       : html`<p class="empty">No staff are listed yet. Admins can add titles from the staff dashboard.</p>`}
   </div>`;
@@ -342,6 +342,84 @@ function account(ctx, { errors = {} } = {}) {
           ? html`<div style="grid-column: 1 / -1; margin-top: 0.6rem;"><a class="btn btn-primary" href="/admin" style="font-weight: 700;">🛡️ Open Staff Panel</a></div>`
           : ''}
     </dl>
+
+    <div class="card" style="margin-bottom: 2rem;">
+      <h2 style="margin-top: 0;">Citizen Profile Picture (DP)</h2>
+      <div style="display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1.25rem;">
+        <div style="width: 84px; height: 84px; border-radius: 50%; overflow: hidden; background: linear-gradient(135deg, var(--violet), var(--magenta)); display: grid; place-items: center; border: 3px solid ${meta.color}; box-shadow: 0 4px 16px rgba(0,0,0,0.4); flex-shrink: 0;">
+          ${u.avatar
+            ? html`<img id="avatar-img-view" src="${u.avatar}" alt="${u.username}" style="width: 100%; height: 100%; object-fit: cover;">`
+            : html`<span id="avatar-initial-view" style="font: 800 2.2rem/1 var(--font-display); color: #fff;">${u.username.slice(0, 1).toUpperCase()}</span>`}
+        </div>
+        <div style="flex: 1; min-width: 220px;">
+          <p style="margin: 0 0 0.35rem 0; font-weight: 700; color: #fff;">Upload your photo or paste an image URL.</p>
+          <p class="muted" style="margin: 0; font-size: 0.88rem;">Appears in the top navigation, forum threads, and citizen roster.</p>
+        </div>
+      </div>
+
+      <form class="form" method="post" action="/account/avatar" style="margin-top: 0.5rem;">
+        ${csrfField(ctx)}
+        <label for="dp-file">Upload from device</label>
+        <input id="dp-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="margin-bottom: 0.85rem;">
+
+        <label for="dp-url">Or paste image URL (e.g. Discord, Imgur)</label>
+        <input id="dp-url" name="avatar_url" type="url" placeholder="https://..." maxlength="500" value="${u.avatar && !u.avatar.startsWith('data:') ? u.avatar : ''}">
+
+        <input type="hidden" name="avatar" id="dp-data" value="${u.avatar && u.avatar.startsWith('data:') ? u.avatar : ''}">
+
+        <div style="display: flex; gap: 0.75rem; margin-top: 1rem; align-items: center; flex-wrap: wrap;">
+          <button class="btn btn-primary" type="submit">Save Profile Picture</button>
+          ${u.avatar
+            ? html`<button class="btn btn-danger btn-sm" type="submit" name="remove" value="1" style="background: transparent; border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171;">Remove Picture</button>`
+            : ''}
+        </div>
+      </form>
+      <script>
+        (function() {
+          var fileInput = document.getElementById('dp-file');
+          var dataInput = document.getElementById('dp-data');
+          var imgView = document.getElementById('avatar-img-view');
+          var initView = document.getElementById('avatar-initial-view');
+          if (!fileInput) return;
+          fileInput.addEventListener('change', function(e) {
+            var file = e.target.files && e.target.files[0];
+            if (!file) return;
+            var reader = new FileReader();
+            reader.onload = function(evt) {
+              var img = new Image();
+              img.onload = function() {
+                var canvas = document.createElement('canvas');
+                var max = 160;
+                var w = img.width;
+                var h = img.height;
+                if (w > h) { if (w > max) { h = Math.round(h * max / w); w = max; } }
+                else { if (h > max) { w = Math.round(w * max / h); h = max; } }
+                canvas.width = w;
+                canvas.height = h;
+                var c = canvas.getContext('2d');
+                c.drawImage(img, 0, 0, w, h);
+                var dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+                dataInput.value = dataUrl;
+                if (imgView) {
+                  imgView.src = dataUrl;
+                } else if (initView && initView.parentElement) {
+                  var newImg = document.createElement('img');
+                  newImg.id = 'avatar-img-view';
+                  newImg.src = dataUrl;
+                  newImg.style.width = '100%';
+                  newImg.style.height = '100%';
+                  newImg.style.objectFit = 'cover';
+                  initView.parentElement.innerHTML = '';
+                  initView.parentElement.appendChild(newImg);
+                }
+              };
+              img.src = evt.target.result;
+            };
+            reader.readAsDataURL(file);
+          });
+        })();
+      </script>
+    </div>
 
     <form class="form card" method="post" action="/account/password" autocomplete="off">
       <h2>Change password</h2>

@@ -110,7 +110,9 @@ function page(ctx, { title, description, active = '', body, wide = false, robots
               const chipLabel = isRoot ? '👑 Root Admin' : uMeta.name;
               return html`<div class="account-capsule">
                 <a class="account-pill" href="/account" title="Account: ${user.username} (${chipLabel})">
-                  <span class="avatar-badge" style="border: 1.5px solid ${isRoot ? '#ffd700' : uMeta.color};">${isRoot ? '👑' : uMeta.icon}</span>
+                  ${user.avatar
+                    ? html`<img src="${user.avatar}" alt="${user.username}" style="width: 26px; height: 26px; border-radius: 50%; object-fit: cover; border: 1.5px solid ${isRoot ? '#ffd700' : uMeta.color}; display: inline-block; vertical-align: middle;">`
+                    : html`<span class="avatar-badge" style="border: 1.5px solid ${isRoot ? '#ffd700' : uMeta.color};">${isRoot ? '👑' : uMeta.icon}</span>`}
                   <span class="user-handle">${user.username}</span>
                   <span class="role-chip" style="background: ${isRoot ? 'linear-gradient(135deg, rgba(248, 192, 64, 0.25), rgba(253, 32, 215, 0.25))' : `${uMeta.color}28`}; color: ${isRoot ? '#ffd700' : uMeta.color}; border: 1px solid ${isRoot ? 'rgba(248, 192, 64, 0.6)' : `${uMeta.color}77`};">${chipLabel}</span>
                 </a>

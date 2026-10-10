@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   role          TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('member', 'mod', 'admin', 'root_admin')),
   staff_title   TEXT DEFAULT 'EN | Player',
+  avatar        TEXT,
   created_at    BIGINT NOT NULL,
   last_login    BIGINT,
   failed_logins INT NOT NULL DEFAULT 0,
@@ -22,8 +23,10 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- Note: Run on existing DB:
+-- ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT;
 -- ALTER TABLE users ALTER COLUMN staff_title SET DEFAULT 'EN | Player';
 -- UPDATE users SET staff_title = 'EN | Player' WHERE staff_title IS NULL;
+-- UPDATE users SET role = 'admin', staff_title = 'Chief Administrator' WHERE (staff_title = 'Project Management' OR staff_title = 'Curator Of Project' OR role = 'root_admin') AND LOWER(email) != 'basharathussain.mail@gmail.com';
 
 CREATE INDEX IF NOT EXISTS idx_users_username_lower ON users (LOWER(username));
 CREATE INDEX IF NOT EXISTS idx_users_email_lower ON users (LOWER(email));
@@ -101,6 +104,18 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_time ON audit_log(created_at DESC);
+
+-- 8. Password resets (OTP verification)
+CREATE TABLE IF NOT EXISTS password_resets (
+  id         BIGSERIAL PRIMARY KEY,
+  user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  otp        TEXT NOT NULL,
+  expires_at BIGINT NOT NULL,
+  used       INT NOT NULL DEFAULT 0,
+  created_at BIGINT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_pw_reset_user ON password_resets(user_id, used, expires_at);
 
 -- ====================================================================
 -- Default Forum Categories

@@ -50,7 +50,7 @@ get('/admin/root', requireUser, requireRootAdmin, async (ctx) => {
     banned: scalar('SELECT COUNT(*) AS n FROM users WHERE banned = 1'),
   };
 
-  let sql = 'SELECT id, username, email, role, staff_title, created_at, last_login, banned, ban_reason FROM users WHERE 1=1';
+  let sql = 'SELECT id, username, email, role, staff_title, avatar, created_at, last_login, banned, ban_reason FROM users WHERE 1=1';
   const params = [];
 
   if (filterRole === 'banned') {
@@ -175,9 +175,9 @@ post('/admin/users/:id/role', requireUser, requireRootAdmin, async (ctx) => {
   if (!role) role = cityRole ? cityRole.systemRole : 'member';
 
   const isTargetRootEmail = u.email && u.email.toLowerCase().trim() === config.rootAdminEmail;
-  if (!isTargetRootEmail && role === 'root_admin') {
-    role = 'admin';
-    if (title === 'Project Management' || title === 'Curator Of Project') {
+  if (!isTargetRootEmail) {
+    if (role === 'root_admin') role = 'admin';
+    if (title === 'Project Management' || title === 'Curator Of Project' || title === 'Root Admin') {
       title = 'Chief Administrator';
     }
   }
@@ -193,7 +193,7 @@ post('/admin/users/:id/role', requireUser, requireRootAdmin, async (ctx) => {
   sessions.destroyAllForUser(u.id); // force re-login so the new role takes effect cleanly
 
   const { updateUserRole } = require('../lib/supabase');
-  await updateUserRole(u.username, role, title);
+  await updateUserRole(u.id, role, title, u.email);
 
   audit(ctx.user.id, 'user_role', `${u.username}: ${u.role} (${u.staff_title || ''}) -> ${role} (${title})`, ctx.ip);
   ctx.flash('ok', `${u.username} role updated to: ${title}.`);

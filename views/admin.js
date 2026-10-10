@@ -196,7 +196,11 @@ function rootConsole(ctx, { list, q = '', filterRole = 'all', stats = {} }) {
         : list.map((u) => html`
           <div class="root-user-card ${u.role === 'root_admin' ? 'is-root' : ''} ${u.banned ? 'is-banned' : ''}">
             <div class="user-card-bio">
-              <div class="user-avatar-circle">${u.role === 'root_admin' ? '👑' : u.username.slice(0, 1).toUpperCase()}</div>
+              <div class="user-avatar-circle" style="${u.avatar ? 'overflow: hidden; padding: 0;' : ''}">
+                ${u.avatar
+                  ? html`<img src="${u.avatar}" alt="${u.username}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`
+                  : (u.role === 'root_admin' ? '👑' : u.username.slice(0, 1).toUpperCase())}
+              </div>
               <div class="user-details">
                 <h3>
                   <span>${u.username}</span>
