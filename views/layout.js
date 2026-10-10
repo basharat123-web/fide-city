@@ -105,7 +105,11 @@ function page(ctx, { title, description, active = '', body, wide = false, robots
         ${user
           ? html`<div class="account">
               <a class="user-link" href="/account">${user.username}</a>
-              ${user.role !== 'member' ? html`<a class="btn btn-quiet" href="/admin">Staff</a>` : ''}
+              ${user.role === 'root_admin'
+                ? html`<a class="btn btn-sm" href="/admin" style="background: linear-gradient(135deg, #f8c040, #fd20d7); color: #fff; font-weight: 800; border-radius: 999px;">👑 Root Panel</a>`
+                : user.role !== 'member'
+                  ? html`<a class="btn btn-quiet" href="/admin">Staff</a>`
+                  : ''}
               <form method="post" action="/logout">${csrfField(ctx)}<button class="btn btn-quiet" type="submit">Sign out</button></form>
             </div>`
           : html`<div class="account">

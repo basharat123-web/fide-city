@@ -61,12 +61,11 @@ post('/login', async (ctx) => {
     return ctx.html(authViews.login(ctx, { error: 'Could not verify you are human. Try again.', username: ident }), 400);
   }
 
-  let user = ident ? q.byName.get(ident, ident) : null;
-  if (!user && config.supabase && config.supabase.enabled) {
+  if (config.supabase && config.supabase.enabled) {
     const { syncFromSupabase } = require('../lib/supabase');
     await syncFromSupabase();
-    user = ident ? q.byName.get(ident, ident) : null;
   }
+  let user = ident ? q.byName.get(ident, ident) : null;
   const now = Date.now();
   const locked = user && user.locked_until > now;
 
@@ -192,7 +191,15 @@ post('/logout', (ctx) => {
 });
 
 /* ------------------------------- Account ------------------------------ */
-get('/account', requireUser, (ctx) => ctx.html(pages.account(ctx)));
+get('/account', requireUser, async (ctx) => {
+  if (config.supabase && config.supabase.enabled) {
+    const { syncFromSupabase } = require('../lib/supabase');
+    await syncFromSupabase();
+    const loadUser = db.prepare('SELECT id, username, email, role, staff_title, created_at, banned FROM users WHERE id = ?');
+    ctx.user = loadUser.get(ctx.user.id);
+  }
+  ctx.html(pages.account(ctx));
+});
 
 post('/account/password', requireUser, async (ctx) => {
   const rl = passwordLimit(String(ctx.user.id));

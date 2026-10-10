@@ -332,8 +332,10 @@ function account(ctx, { errors = {} } = {}) {
     <dl class="facts">
       <div><dt>Username</dt><dd>${u.username}</dd></div>
       <div><dt>Email</dt><dd>${u.email}</dd></div>
-      <div><dt>Role</dt><dd>${u.role === 'admin' ? 'Admin' : u.role === 'mod' ? 'Moderator' : 'Member'}</dd></div>
+      <div><dt>Role</dt><dd>${u.role === 'root_admin' ? html`<span class="badge badge-root" style="font-size: 0.85rem; padding: 0.25rem 0.75rem;">👑 Root Admin (Owner)</span>` : u.role === 'admin' ? html`<span class="badge badge-admin">Admin</span>` : u.role === 'mod' ? html`<span class="badge badge-mod">Moderator</span>` : 'Member'}</dd></div>
+      ${u.staff_title ? html`<div><dt>Staff title</dt><dd><strong>${u.staff_title}</strong></dd></div>` : ''}
       <div><dt>Joined</dt><dd>${fmtDate(u.created_at)}</dd></div>
+      ${['root_admin', 'admin', 'mod'].includes(u.role) ? html`<div style="grid-column: 1 / -1; margin-top: 0.6rem;"><a class="btn btn-primary" href="/admin" style="background: linear-gradient(135deg, #f8c040, #fd20d7); font-weight: 800;">👑 Open Staff & Account Dashboard</a></div>` : ''}
     </dl>
 
     <form class="form card" method="post" action="/account/password" autocomplete="off">
