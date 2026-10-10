@@ -30,7 +30,7 @@ const q = {
 const scalar = (sql, ...args) => db.prepare(sql).get(...args).n;
 
 get('/admin', requireUser, requireStaff, (ctx) => {
-  const isAdmin = ctx.user.role === 'admin';
+  const isAdmin = ['admin', 'root_admin'].includes(ctx.user.role);
   let tab = ctx.query.get('tab') || 'overview';
   if (!['overview', 'users', 'stories', 'audit'].includes(tab)) tab = 'overview';
   if (!isAdmin && (tab === 'stories' || tab === 'audit')) tab = 'overview';
@@ -70,9 +70,13 @@ function targetUser(ctx) {
 
 post('/admin/users/:id/ban', requireUser, requireStaff, (ctx) => {
   const u = targetUser(ctx);
-  // Mods may only ban plain members; admins may ban members and mods but never other admins.
-  const actorIsAdmin = ctx.user.role === 'admin';
-  if (u.role === 'admin' || (u.role === 'mod' && !actorIsAdmin)) throw httpError(403, 'You cannot ban this account.');
+  const isRoot = ctx.user.role === 'root_admin';
+  const isAdmin = ctx.user.role === 'admin' || isRoot;
+
+  if (u.role === 'root_admin') throw httpError(403, 'Root admin accounts cannot be banned.');
+  if (u.role === 'admin' && !isRoot) throw httpError(403, 'Only Root Admin can ban an admin.');
+  if (u.role === 'mod' && !isAdmin) throw httpError(403, 'Only Admins can ban a moderator.');
+
   const reason = sec.cleanLine(ctx.body.reason, 200) || 'No reason given';
   q.ban.run(reason, u.id);
   sessions.destroyAllForUser(u.id);
@@ -83,6 +87,10 @@ post('/admin/users/:id/ban', requireUser, requireStaff, (ctx) => {
 
 post('/admin/users/:id/unban', requireUser, requireStaff, (ctx) => {
   const u = targetUser(ctx);
+  const isRoot = ctx.user.role === 'root_admin';
+  if ((u.role === 'admin' || u.role === 'root_admin') && !isRoot) {
+    throw httpError(403, 'Only Root Admin can unban this account.');
+  }
   q.unban.run(u.id);
   audit(ctx.user.id, 'user_unban', u.username, ctx.ip);
   ctx.flash('ok', `${u.username} was unbanned.`);
@@ -91,8 +99,16 @@ post('/admin/users/:id/unban', requireUser, requireStaff, (ctx) => {
 
 post('/admin/users/:id/role', requireUser, requireAdmin, (ctx) => {
   const u = targetUser(ctx);
-  const role = sec.str(ctx.body.role, 10);
-  if (!['member', 'mod', 'admin'].includes(role)) throw httpError(400, 'Invalid role.');
+  const isRoot = ctx.user.role === 'root_admin';
+  const role = sec.str(ctx.body.role, 15);
+
+  const allowedRoles = isRoot ? ['member', 'mod', 'admin', 'root_admin'] : ['member', 'mod'];
+  if (!allowedRoles.includes(role)) throw httpError(400, 'Invalid role or insufficient permissions.');
+
+  if (!isRoot && (u.role === 'admin' || u.role === 'root_admin')) {
+    throw httpError(403, 'Only Root Admin can change staff/admin roles.');
+  }
+
   const title = sec.cleanLine(ctx.body.title, 40) || null;
   q.role.run(role, role === 'member' ? null : title, u.id);
   sessions.destroyAllForUser(u.id); // force re-login so the new role takes effect cleanly

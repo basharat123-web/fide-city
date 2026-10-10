@@ -11,6 +11,7 @@
     "start": "node --disable-warning=ExperimentalWarning server.js",
     "dev": "node --disable-warning=ExperimentalWarning --watch server.js",
     "create-admin": "node --disable-warning=ExperimentalWarning scripts/create-admin.js",
+    "create-root-admin": "node --disable-warning=ExperimentalWarning scripts/create-root-admin.js",
     "test": "node --disable-warning=ExperimentalWarning scripts/smoke-test.js"
   },
   "license": "UNLICENSED"

@@ -12,16 +12,22 @@ function requireUser(ctx) {
   }
 }
 
-/** Middleware: moderators and admins only. Non-staff get a plain 404 so staff URLs are not advertised. */
+/** Middleware: moderators, admins, and root admins. Non-staff get a plain 404 so staff URLs are not advertised. */
 function requireStaff(ctx) {
-  if (!ctx.user || (ctx.user.role !== 'mod' && ctx.user.role !== 'admin')) throw httpError(404, 'Page not found');
+  if (!ctx.user || !['mod', 'admin', 'root_admin'].includes(ctx.user.role)) throw httpError(404, 'Page not found');
 }
 
 function requireAdmin(ctx) {
-  if (!ctx.user || ctx.user.role !== 'admin') throw httpError(404, 'Page not found');
+  if (!ctx.user || !['admin', 'root_admin'].includes(ctx.user.role)) throw httpError(404, 'Page not found');
 }
 
-const isStaff = (u) => Boolean(u && (u.role === 'mod' || u.role === 'admin'));
+function requireRootAdmin(ctx) {
+  if (!ctx.user || ctx.user.role !== 'root_admin') throw httpError(404, 'Page not found');
+}
+
+const isStaff = (u) => Boolean(u && ['mod', 'admin', 'root_admin'].includes(u.role));
+const isAdmin = (u) => Boolean(u && ['admin', 'root_admin'].includes(u.role));
+const isRootAdmin = (u) => Boolean(u && u.role === 'root_admin');
 
 function intParam(v) {
   return /^\d{1,9}$/.test(String(v)) ? Number(v) : null;
@@ -32,4 +38,4 @@ function pageParam(ctx) {
   return n && n > 0 && n < 100000 ? n : 1;
 }
 
-module.exports = { httpError, requireUser, requireStaff, requireAdmin, isStaff, intParam, pageParam };
+module.exports = { httpError, requireUser, requireStaff, requireAdmin, requireRootAdmin, isStaff, isAdmin, isRootAdmin, intParam, pageParam };

@@ -25,8 +25,16 @@ function overview(ctx, { stats }) {
   <p class="muted">Moderators can pin, lock and delete threads and replies on the forum, and ban members from the Members tab. Admins can also manage roles, news and the security log.</p>`;
 }
 
+function roleBadge(role) {
+  if (role === 'root_admin') return html`<span class="badge badge-root">👑 Root Admin</span>`;
+  if (role === 'admin') return html`<span class="badge badge-admin">Admin</span>`;
+  if (role === 'mod') return html`<span class="badge badge-mod">Moderator</span>`;
+  return html`<span class="badge badge-quiet">Member</span>`;
+}
+
 function users(ctx, { list, q }) {
-  const isAdmin = ctx.user.role === 'admin';
+  const isRoot = ctx.user.role === 'root_admin';
+  const isAdmin = ctx.user.role === 'admin' || isRoot;
   return html`<form class="inline-search" method="get" action="/admin" role="search">
       <input type="hidden" name="tab" value="users">
       <label for="q" class="sr">Search members</label>
@@ -40,7 +48,7 @@ function users(ctx, { list, q }) {
       ${list.map(
         (u) => html`<tr>
           <th scope="row"><strong>${u.username}</strong><br><span class="muted">${u.email}</span>${u.banned ? html`<br><span class="badge badge-danger">Banned</span> <span class="muted">${u.ban_reason || ''}</span>` : ''}</th>
-          <td>${u.role}${u.staff_title ? html`<br><span class="muted">${u.staff_title}</span>` : ''}</td>
+          <td>${roleBadge(u.role)}${u.staff_title ? html`<br><span class="muted">${u.staff_title}</span>` : ''}</td>
           <td>${fmtDate(u.created_at)}</td>
           <td>${u.last_login ? fmtDateTime(u.last_login) : 'Never'}</td>
           <td class="actions">
@@ -48,15 +56,19 @@ function users(ctx, { list, q }) {
               ? html`<span class="muted">You</span>`
               : html`
                 ${u.banned
-                  ? html`<form method="post" action="/admin/users/${u.id}/unban">${csrfField(ctx)}<button class="btn btn-ghost btn-sm" type="submit">Unban</button></form>`
-                  : u.role === 'member' || isAdmin
-                    ? html`<form method="post" action="/admin/users/${u.id}/ban" class="row-form">${csrfField(ctx)}<label class="sr" for="reason-${u.id}">Ban reason</label><input id="reason-${u.id}" name="reason" placeholder="Reason" maxlength="200" required><button class="btn btn-danger btn-sm" type="submit">Ban</button></form>`
-                    : ''}
-                ${isAdmin
+                  ? (isRoot || u.role === 'member' || (u.role === 'mod' && isAdmin))
+                    ? html`<form method="post" action="/admin/users/${u.id}/unban">${csrfField(ctx)}<button class="btn btn-ghost btn-sm" type="submit">Unban</button></form>`
+                    : ''
+                  : u.role === 'root_admin'
+                    ? html`<span class="muted">Protected</span>`
+                    : (u.role === 'member' || (u.role === 'mod' && isAdmin) || (u.role === 'admin' && isRoot))
+                      ? html`<form method="post" action="/admin/users/${u.id}/ban" class="row-form">${csrfField(ctx)}<label class="sr" for="reason-${u.id}">Ban reason</label><input id="reason-${u.id}" name="reason" placeholder="Reason" maxlength="200" required><button class="btn btn-danger btn-sm" type="submit">Ban</button></form>`
+                      : ''}
+                ${(isRoot || (isAdmin && u.role !== 'admin' && u.role !== 'root_admin'))
                   ? html`<form method="post" action="/admin/users/${u.id}/role" class="row-form">${csrfField(ctx)}
                       <label class="sr" for="role-${u.id}">Role</label>
                       <select id="role-${u.id}" name="role">
-                        ${['member', 'mod', 'admin'].map((r) => html`<option value="${r}"${u.role === r ? html` selected` : ''}>${r}</option>`)}
+                        ${(isRoot ? ['member', 'mod', 'admin', 'root_admin'] : ['member', 'mod']).map((r) => html`<option value="${r}"${u.role === r ? html` selected` : ''}>${r}</option>`)}
                       </select>
                       <label class="sr" for="title-${u.id}">Staff title</label>
                       <input id="title-${u.id}" name="title" value="${u.staff_title || ''}" placeholder="Staff title" maxlength="40">

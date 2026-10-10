@@ -432,6 +432,7 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--m
 
 .badge { display: inline-block; padding: 0.15rem 0.55rem; border-radius: 999px; background: rgba(248, 192, 64, 0.16); color: var(--gold-hi); font: 700 0.72rem/1.4 var(--font-body); vertical-align: middle; }
 .badge-quiet { background: rgba(255, 255, 255, 0.08); color: var(--muted); }
+.badge-root { background: linear-gradient(135deg, rgba(248, 192, 64, 0.35), rgba(253, 32, 215, 0.35)); color: #ffdf6d; border: 1px solid rgba(248, 192, 64, 0.6); box-shadow: 0 0 10px rgba(248, 192, 64, 0.25); font-weight: 800; }
 .badge-admin { background: rgba(253, 32, 215, 0.2); color: var(--magenta-hi); }
 .badge-mod { background: rgba(114, 13, 189, 0.45); color: #d9b3ff; }
 .badge-danger { background: rgba(255, 107, 138, 0.18); color: var(--danger); }
