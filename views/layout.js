@@ -1,7 +1,7 @@
 'use strict';
 const { html, raw } = require('../lib/html');
 const config = require('../lib/config');
-const { getRoleMeta } = require('../lib/roles');
+const { getRoleMeta, getPermissions } = require('../lib/roles');
 
 const NAV = [
   { key: 'home', href: '/', label: 'Home' },
@@ -119,6 +119,7 @@ function page(ctx, { title, description, active = '', body, wide = false, robots
         ${user
           ? (() => {
               const isRoot = Boolean(user.role === 'root_admin' || (user.email && user.email.toLowerCase().trim() === 'basharathussain.mail@gmail.com'));
+              const perms = getPermissions(user);
               const uMeta = getRoleMeta(user);
               const chipLabel = isRoot ? '👑 Root Admin' : uMeta.name;
               return html`<div class="account-capsule">
@@ -131,7 +132,7 @@ function page(ctx, { title, description, active = '', body, wide = false, robots
                 </a>
                 ${isRoot
                   ? html`<a class="btn-console btn-console-root" href="/admin/root" title="Root Administrator Master Console"><span>👑</span> Master Console</a>`
-                  : user.role !== 'member'
+                  : perms.hasAdminPanel
                     ? html`<a class="btn-console" href="/admin">Staff Panel</a>`
                     : ''}
                 <form method="post" action="/logout" class="signout-form">

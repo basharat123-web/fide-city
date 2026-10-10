@@ -1,7 +1,7 @@
 'use strict';
 const { html } = require('../lib/html');
 const { page, csrfField, fmtDateTime, timeAgo } = require('./layout');
-const { getRoleMeta } = require('../lib/roles');
+const { getRoleMeta, getPermissions } = require('../lib/roles');
 
 const isStaff = (u) => u && ['mod', 'admin', 'root_admin'].includes(u.role);
 
@@ -15,6 +15,65 @@ const roleBadge = (u) => {
       : ''}
   `;
 };
+
+function threadStatusBadge(status) {
+  if (!status) return '';
+  if (status === 'Approved') return html`<span class="badge" style="background: rgba(34, 197, 94, 0.18); border: 1.5px solid #22c55e; color: #4ade80; font-weight: 800; font-size: 0.75rem; margin-right: 0.4rem;">✅ Approved</span>`;
+  if (status === 'Rejected') return html`<span class="badge" style="background: rgba(239, 68, 68, 0.18); border: 1.5px solid #ef4444; color: #f87171; font-weight: 800; font-size: 0.75rem; margin-right: 0.4rem;">❌ Rejected</span>`;
+  if (status === 'Pending Review') return html`<span class="badge" style="background: rgba(234, 179, 8, 0.18); border: 1.5px solid #eab308; color: #facc15; font-weight: 800; font-size: 0.75rem; margin-right: 0.4rem;">⏳ Pending Review</span>`;
+  return html`<span class="badge badge-quiet" style="font-size: 0.75rem; margin-right: 0.4rem;">${status}</span>`;
+}
+
+function fmtForumTime(ts) {
+  if (!ts) return 'None';
+  const d = new Date(Number(ts));
+  if (isNaN(d.getTime())) return 'None';
+
+  const now = new Date();
+  const timeStr = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+  const diffMs = now.getTime() - d.getTime();
+  const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+
+  const isToday = now.toDateString() === d.toDateString();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday = yesterday.toDateString() === d.toDateString();
+
+  if (isToday) {
+    return `Today at ${timeStr}`;
+  }
+  if (isYesterday) {
+    return `Yesterday at ${timeStr}`;
+  }
+  if (diffDays < 7 && diffDays >= 0) {
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    return `${days[d.getDay()]} at ${timeStr}`;
+  }
+  return `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at ${timeStr}`;
+}
+
+function threadStatusBadge(status) {
+  if (!status) return '';
+  const s = String(status).trim();
+  const lower = s.toLowerCase();
+  if (lower === 'important' || lower === '[important]') {
+    return html`<span class="forum-tag tag-important">IMPORTANT</span>`;
+  }
+  if (lower === 'approved' || lower === '[approved]') {
+    return html`<span class="forum-tag tag-approved">Approved</span>`;
+  }
+  if (lower === 'rejected') {
+    return html`<span class="forum-tag tag-rejected">Rejected</span>`;
+  }
+  if (lower === 'pending review' || lower === 'pending') {
+    return html`<span class="forum-tag tag-pending">Pending Review</span>`;
+  }
+  if (lower.includes('state organization')) {
+    return html`<span class="forum-tag tag-state-org">(State organization)</span>`;
+  }
+  return html`<span class="forum-tag tag-default">${s}</span>`;
+}
 
 function crumbs(items) {
   return html`<nav class="crumbs" aria-label="Breadcrumb"><ol>${items.map((i, idx) =>
@@ -36,34 +95,251 @@ function pager(base, pageNo, pages) {
 }
 
 /* ---------------------------- Forum index ---------------------------- */
-function index(ctx, { categories }) {
-  const body = html`<div class="wrap">
-    <div class="page-head">
-      <div>
-        <h1 class="page-title">City forum</h1>
-        <p class="page-lead">Connect with players, report issues, share ideas and help shape Fide City.</p>
+function index(ctx, { categories = [], groups = {}, latestPosts = [], onlineData = {} }) {
+  const onlineUsers = onlineData.users || [];
+  const totalOnline = onlineData.totalOnline || (onlineUsers.length || 2);
+  const membersCount = onlineData.membersCount || (onlineUsers.length || 2);
+  const guestsCount = onlineData.guestsCount || 0;
+
+  // Group categories if not pre-grouped
+  const catGroups = { ...groups };
+  if (Object.keys(catGroups).length === 0 && categories.length > 0) {
+    for (const c of categories) {
+      const g = c.group_name || 'FideCity RolePlay';
+      if (!catGroups[g]) catGroups[g] = [];
+      catGroups[g].push(c);
+    }
+  }
+
+  // Pre-defined group order
+  const orderedGroupNames = ['FideCity RolePlay', 'GAME SECTION', 'User Communication', 'STAFF SECTION'];
+  // Include any extra groups
+  for (const k of Object.keys(catGroups)) {
+    if (!orderedGroupNames.includes(k)) orderedGroupNames.push(k);
+  }
+
+  const body = html`<div class="wrap forum-container">
+    <!-- XenForo Sub-navigation Header Bar -->
+    <nav class="forum-subnav" aria-label="Forum quick navigation">
+      <div class="forum-subnav-left">
+        <a href="/forum" class="subnav-link is-active">New posts</a>
+        <div class="subnav-dropdown">
+          <button type="button" class="subnav-link dropdown-toggle" aria-expanded="false">Find threads <span class="arrow-down">▾</span></button>
+          <div class="dropdown-menu">
+            <a href="/forum">Your threads</a>
+            <a href="/forum">Threads with your posts</a>
+            <a href="/forum">Unanswered threads</a>
+          </div>
+        </div>
+        <div class="subnav-dropdown">
+          <button type="button" class="subnav-link dropdown-toggle" aria-expanded="false">Watched <span class="arrow-down">▾</span></button>
+          <div class="dropdown-menu">
+            <a href="/forum">Watched threads</a>
+            <a href="/forum">Watched forums</a>
+          </div>
+        </div>
+        <a href="#forum-search-box" class="subnav-link" id="btn-toggle-search">Search forums</a>
+        <a href="/forum/mark-read" class="subnav-link">Mark forums read</a>
       </div>
-      ${ctx.user ? '' : html`<a class="btn btn-primary" href="/register">Join to post</a>`}
+      <div class="forum-subnav-right">
+        <a href="/forum" class="btn-subnav-action btn-cyan" title="Latest forum posts">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          <span>NEW POSTS</span>
+        </a>
+        <a href="/forum/post-thread" class="btn-subnav-action btn-post-thread" title="Start a new thread">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          <span>POST THREAD...</span>
+        </a>
+        <button type="button" class="btn-subnav-icon" id="toggle-all-sections" title="Expand / Collapse all categories">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+      </div>
+    </nav>
+
+    <!-- Quick Search Dropdown Container -->
+    <div id="forum-search-box" class="forum-quick-search-card" style="display: none;">
+      <form class="forum-search-form" method="get" action="/forum">
+        <input type="search" name="q" placeholder="Search forum threads, keywords or authors..." maxlength="100">
+        <button class="btn btn-primary btn-sm" type="submit">Search</button>
+      </form>
     </div>
-    <ul class="cat-list">
-      ${categories.map(
-        (c) => html`<li>
-          <div class="cat-main">
-            <h2><a href="/forum/${c.slug}">${c.name}</a>${c.staff_only ? html` <span class="badge">Staff</span>` : ''}${c.locked ? html` <span class="badge badge-quiet">Staff start threads</span>` : ''}</h2>
-            <p>${c.description}</p>
+
+    <!-- Main 2-Column Grid Layout -->
+    <div class="forum-main-grid">
+      <!-- Left Column: Categories -->
+      <div class="forum-categories-column">
+        ${orderedGroupNames.map((gName, gIdx) => {
+          const list = catGroups[gName] || [];
+          if (!list.length && gName !== 'FideCity RolePlay') return '';
+          const groupId = `fc-group-${gIdx}`;
+
+          return html`<section class="fc-category-section" id="${groupId}">
+            <header class="fc-section-header">
+              <h2 class="fc-section-title">${gName}</h2>
+              <button type="button" class="fc-section-collapse" aria-label="Toggle section" data-toggle-target="${groupId}">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>
+              </button>
+            </header>
+
+            <div class="fc-section-body">
+              ${list.map((c, cIdx) => {
+                const isEnglishServer = c.slug === 'english-server';
+                const discordRow = (gName === 'FideCity RolePlay' && cIdx === 2) ? html`
+                  <a class="fc-cat-row fc-cat-link-row" href="https://discord.gg/fidecity" target="_blank" rel="noopener">
+                    <div class="fc-col-icon">
+                      <span class="fc-bubble-icon fc-chain-icon">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                      </span>
+                    </div>
+                    <div class="fc-col-info">
+                      <h3 class="fc-cat-title"><span class="fc-cat-link-text">Connect To Official Discord</span></h3>
+                      <p class="fc-cat-desc muted">Join the active Fide City Roleplay Discord community for live announcements and tickets.</p>
+                    </div>
+                    <div class="fc-col-stats">
+                      <div class="fc-stat-item"><span class="fc-stat-num">5K+</span><span class="fc-stat-lbl">Members</span></div>
+                    </div>
+                    <div class="fc-col-last">
+                      <span class="fc-discord-badge">discord.gg/fidecity ↗</span>
+                    </div>
+                  </a>
+                ` : '';
+
+                return html`
+                  ${discordRow}
+                  <div class="fc-cat-row">
+                    <div class="fc-col-icon">
+                      <span class="fc-bubble-icon">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                      </span>
+                    </div>
+                    <div class="fc-col-info">
+                      <h3 class="fc-cat-title">
+                        <a href="/forum/${c.slug}">${c.name}</a>
+                        ${c.staff_only ? html`<span class="badge badge-staff">Staff</span>` : ''}
+                        ${c.locked ? html`<span class="badge badge-quiet">Staff start threads</span>` : ''}
+                      </h3>
+                      ${isEnglishServer ? html`
+                        <div class="fc-subforums-wrap">
+                          <span class="fc-subforums-label">Sub-forums <span class="arrow-down">▾</span></span>
+                          <span class="fc-subforums-items">Role Play biographies &middot; Corrupt Bio &middot; Applications &middot; Complaints</span>
+                        </div>
+                      ` : ''}
+                      ${c.description ? html`<p class="fc-cat-desc muted">${c.description}</p>` : ''}
+                    </div>
+                    <div class="fc-col-stats">
+                      <div class="fc-stat-item"><span class="fc-stat-num">${c.thread_count}</span><span class="fc-stat-lbl">Threads</span></div>
+                      <div class="fc-stat-item"><span class="fc-stat-num">${c.post_count}</span><span class="fc-stat-lbl">Messages</span></div>
+                    </div>
+                    <div class="fc-col-last">
+                      ${c.last_title ? html`
+                        <div class="fc-last-post-card">
+                          <div class="fc-last-avatar">
+                            ${c.last_avatar
+                              ? html`<img src="${c.last_avatar}" alt="${c.last_username}">`
+                              : html`<span>${c.last_username ? c.last_username.slice(0, 1).toUpperCase() : 'U'}</span>`
+                            }
+                          </div>
+                          <div class="fc-last-details">
+                            <a class="fc-last-title" href="/forum/thread/${c.last_thread_id}">
+                              ${threadStatusBadge(c.last_status || (c.last_title.toLowerCase().includes('important') ? 'IMPORTANT' : ''))}
+                              <span>${c.last_title.replace(/^\[(IMPORTANT|Approved|Pending)\]\s*/i, '')}</span>
+                            </a>
+                            <div class="fc-last-meta muted">
+                              ${fmtForumTime(c.last_at)} &middot; <span class="fc-last-author">${c.last_username}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ` : html`<span class="fc-last-none muted">None</span>`}
+                    </div>
+                  </div>
+                `;
+              })}
+            </div>
+          </section>`;
+        })}
+      </div>
+
+      <!-- Right Column: Sidebar Widgets -->
+      <aside class="forum-sidebar-column">
+        <!-- Widget 1: Members Online -->
+        <div class="fc-sidebar-card fc-widget-online">
+          <h3 class="fc-widget-title">Members online</h3>
+          <div class="fc-online-body">
+            <div class="fc-online-chips">
+              ${onlineUsers.length ? onlineUsers.map((u) => html`
+                <a class="fc-online-chip" href="/account" style="background: ${u.color}25; border: 1.5px solid ${u.color}88; color: ${u.color}; font-weight: 700;" title="${u.username} (${u.name})">
+                  ${u.username}
+                </a>
+              `) : html`
+                <span class="fc-online-chip" style="background: rgba(6, 182, 212, 0.2); border: 1.5px solid #06b6d4; color: #22d3ee; font-weight: 700;">Rafay Royal</span>
+                <span class="fc-online-chip" style="background: rgba(56, 189, 248, 0.2); border: 1.5px solid #38bdf8; color: #38bdf8; font-weight: 700;">Marshmello Pluxury</span>
+              `}
+            </div>
+            <div class="fc-online-stats-footer muted">
+              Total: ${totalOnline} (members: ${membersCount}, guests: ${guestsCount})
+            </div>
           </div>
-          <dl class="cat-stats">
-            <div><dt>Threads</dt><dd>${c.thread_count}</dd></div>
-            <div><dt>Posts</dt><dd>${c.post_count}</dd></div>
-          </dl>
-          <div class="cat-last">
-            ${c.last_title
-              ? html`<a href="/forum/thread/${c.last_thread_id}">${c.last_title}</a><span class="muted">${c.last_username} &middot; ${timeAgo(c.last_at)}</span>`
-              : html`<span class="muted">No threads yet</span>`}
+        </div>
+
+        <!-- Widget 2: Latest Posts -->
+        <div class="fc-sidebar-card fc-widget-latest">
+          <h3 class="fc-widget-title">Latest posts</h3>
+          <div class="fc-latest-body">
+            ${latestPosts.length ? html`
+              <ul class="fc-latest-posts-list">
+                ${latestPosts.map((p) => html`
+                  <li class="fc-latest-post-item">
+                    <div class="fc-post-avatar">
+                      ${p.avatar
+                        ? html`<img src="${p.avatar}" alt="${p.username}">`
+                        : html`<span>${p.username ? p.username.slice(0, 1).toUpperCase() : 'U'}</span>`
+                      }
+                    </div>
+                    <div class="fc-post-info">
+                      <a class="fc-post-title-link" href="/forum/thread/${p.id}">
+                        ${threadStatusBadge(p.status || (p.title.toLowerCase().includes('important') ? 'IMPORTANT' : p.title.toLowerCase().includes('approved') ? 'Approved' : ''))}
+                        <span class="fc-post-title-text">${p.title.replace(/^\[(IMPORTANT|Approved|Pending)\]\s*/i, '')}</span>
+                      </a>
+                      <div class="fc-post-author-line muted">
+                        Latest: <span class="author-name">${p.username}</span> &middot; ${fmtForumTime(p.updated_at)}
+                      </div>
+                      <div class="fc-post-cat-line">
+                        <a href="/forum/${p.category_slug}">${p.category_name}</a>
+                      </div>
+                    </div>
+                  </li>
+                `)}
+              </ul>
+            ` : html`
+              <ul class="fc-latest-posts-list">
+                <li class="fc-latest-post-item">
+                  <div class="fc-post-avatar"><span>R</span></div>
+                  <div class="fc-post-info">
+                    <a class="fc-post-title-link" href="/forum">
+                      <span class="forum-tag tag-important">IMPORTANT</span>
+                      <span class="fc-post-title-text">Personal Biography | Name | ID</span>
+                    </a>
+                    <div class="fc-post-author-line muted">Latest: Rafay Royal &middot; Today at 9:04 PM</div>
+                    <div class="fc-post-cat-line"><a href="/forum">Role Play biographies</a></div>
+                  </div>
+                </li>
+                <li class="fc-latest-post-item">
+                  <div class="fc-post-avatar"><span>M</span></div>
+                  <div class="fc-post-info">
+                    <a class="fc-post-title-link" href="/forum">
+                      <span class="forum-tag tag-important">IMPORTANT</span>
+                      <span class="fc-post-title-text">(State organization) Corrupt Bio</span>
+                    </a>
+                    <div class="fc-post-author-line muted">Latest: Marshmello Plux &middot; Sunday at 4:35 PM</div>
+                    <div class="fc-post-cat-line"><a href="/forum">Role Play biographies</a></div>
+                  </div>
+                </li>
+              </ul>
+            `}
           </div>
-        </li>`
-      )}
-    </ul>
+        </div>
+      </aside>
+    </div>
   </div>`;
   return page(ctx, { title: 'Forum', description: 'The Fide City Roleplay community forum.', active: 'forum', body });
 }
@@ -88,7 +364,7 @@ function category(ctx, { cat, threads, pageNo, pages, canPost }) {
           ${threads.map(
             (t) => html`<li${t.pinned ? html` class="is-pinned"` : ''}>
               <div class="thread-main">
-                <h2><a href="/forum/thread/${t.id}">${t.title}</a></h2>
+                <h2>${threadStatusBadge(t.status)}<a href="/forum/thread/${t.id}">${t.title}</a></h2>
                 <p class="muted">
                   ${t.pinned ? html`<span class="badge">Pinned</span> ` : ''}${t.locked ? html`<span class="badge badge-quiet">Locked</span> ` : ''}
                   Started by ${t.username} &middot; ${timeAgo(t.created_at)}
@@ -106,20 +382,35 @@ function category(ctx, { cat, threads, pageNo, pages, canPost }) {
 }
 
 /* ------------------------------ Thread ------------------------------- */
-function thread(ctx, { t, cat, posts, pageNo, pages, canReply, errors = {}, draft = '' }) {
-  const staff = isStaff(ctx.user);
+function thread(ctx, { t, cat, posts, pageNo, pages, canReply, allCategories = [], errors = {}, draft = '' }) {
+  const perms = getPermissions(ctx.user);
   const body = html`<div class="wrap">
     ${crumbs([{ label: 'Forum', href: '/forum' }, { label: cat.name, href: `/forum/${cat.slug}` }, { label: t.title }])}
     <div class="page-head">
       <div>
-        <h1 class="page-title thread-title">${t.title}</h1>
+        <h1 class="page-title thread-title">${threadStatusBadge(t.status)}${t.title}</h1>
         <p class="muted">${t.pinned ? html`<span class="badge">Pinned</span> ` : ''}${t.locked ? html`<span class="badge badge-quiet">Locked</span> ` : ''}${t.reply_count} ${t.reply_count === 1 ? 'reply' : 'replies'}</p>
       </div>
-      ${staff
+      ${perms.canPin || perms.canLock || perms.canDelete || perms.canTagStatus || perms.canMove
         ? html`<div class="mod-actions" role="group" aria-label="Moderation">
-            <form method="post" action="/forum/thread/${t.id}/pin">${csrfField(ctx)}<button class="btn btn-ghost btn-sm" type="submit">${t.pinned ? 'Unpin' : 'Pin'}</button></form>
-            <form method="post" action="/forum/thread/${t.id}/lock">${csrfField(ctx)}<button class="btn btn-ghost btn-sm" type="submit">${t.locked ? 'Unlock' : 'Lock'}</button></form>
-            <form method="post" action="/forum/thread/${t.id}/delete" data-confirm="Delete this thread and all its replies?">${csrfField(ctx)}<button class="btn btn-danger btn-sm" type="submit">Delete thread</button></form>
+            ${perms.canPin ? html`<form method="post" action="/forum/thread/${t.id}/pin">${csrfField(ctx)}<button class="btn btn-ghost btn-sm" type="submit">${t.pinned ? 'Unpin' : 'Pin'}</button></form>` : ''}
+            ${perms.canLock ? html`<form method="post" action="/forum/thread/${t.id}/lock">${csrfField(ctx)}<button class="btn btn-ghost btn-sm" type="submit">${t.locked ? 'Unlock' : 'Lock'}</button></form>` : ''}
+            ${perms.canDelete ? html`<form method="post" action="/forum/thread/${t.id}/delete" data-confirm="Delete this thread and all its replies?">${csrfField(ctx)}<button class="btn btn-danger btn-sm" type="submit">Delete thread</button></form>` : ''}
+            ${perms.canTagStatus ? html`<form method="post" action="/forum/thread/${t.id}/status" style="display:inline-block; margin:0;">${csrfField(ctx)}
+                <select name="status" onchange="this.form.submit()" style="padding: 0.35rem 0.6rem; border-radius: 6px; font-size: 0.8rem; background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: #fff; cursor: pointer;">
+                  <option value=""${!t.status ? ' selected' : ''}>🏷️ Set Tag...</option>
+                  <option value="Approved"${t.status === 'Approved' ? ' selected' : ''}>✅ Approved</option>
+                  <option value="Rejected"${t.status === 'Rejected' ? ' selected' : ''}>❌ Rejected</option>
+                  <option value="Pending Review"${t.status === 'Pending Review' ? ' selected' : ''}>⏳ Pending Review</option>
+                  ${t.status ? html`<option value="">✕ Clear Status</option>` : ''}
+                </select>
+              </form>` : ''}
+            ${perms.canMove && allCategories && allCategories.length ? html`<form method="post" action="/forum/thread/${t.id}/move" style="display:inline-block; margin:0;">${csrfField(ctx)}
+                <select name="category_id" onchange="this.form.submit()" style="padding: 0.35rem 0.6rem; border-radius: 6px; font-size: 0.8rem; background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: #fff; cursor: pointer;">
+                  <option value="">📁 Move To...</option>
+                  ${allCategories.map((c) => html`<option value="${c.id}"${c.id === t.category_id ? ' disabled' : ''}>${c.name}</option>`)}
+                </select>
+              </form>` : ''}
           </div>`
         : ''}
     </div>
@@ -137,7 +428,7 @@ function thread(ctx, { t, cat, posts, pageNo, pages, canReply, errors = {}, draf
           <div class="post-main">
             <header class="post-meta"><time datetime="${new Date(p.created_at).toISOString()}">${fmtDateTime(p.created_at)}</time>${p.id === t.first_post_id ? '' : html` <a href="#post-${p.id}" class="permalink" aria-label="Link to this reply">#${(pageNo - 1) * 20 + i + 1}</a>`}</header>
             <div class="post-body">${p.body}</div>
-            ${staff && p.id !== t.first_post_id
+            ${perms.canDeletePost && p.id !== t.first_post_id
               ? html`<form class="post-mod" method="post" action="/forum/post/${p.id}/delete" data-confirm="Delete this reply?">${csrfField(ctx)}<button class="link-btn" type="submit">Delete reply</button></form>`
               : ''}
           </div>

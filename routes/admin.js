@@ -1,4 +1,5 @@
 'use strict';
+const fs = require('node:fs');
 const { get, post } = require('../lib/http');
 const { db, audit } = require('../lib/db');
 const sessions = require('../lib/session');
@@ -6,6 +7,7 @@ const sec = require('../lib/security');
 const config = require('../lib/config');
 const view = require('../views/admin');
 const { httpError, requireUser, requireStaff, requireAdmin, requireRootAdmin, intParam } = require('./helpers');
+const { getPermissions } = require('../lib/roles');
 
 const q = {
   count: (t) => db.prepare(`SELECT COUNT(*) AS n FROM ${t}`),
@@ -59,7 +61,6 @@ get('/admin/root', requireUser, requireRootAdmin, async (ctx) => {
   } else if (filterRole === 'leadership') {
     sql += " AND staff_title IN ('Governor', 'Election Commissioner', 'Faction Leader', 'State Leader', 'Crime Leader', 'State Deputy', 'Crime Deputy', 'Weazel News')";
   } else if (filterRole === 'member') {
-    // EN | Player is the permanent citizen role held by all active citizens
     sql += ' AND banned = 0';
   } else if (['root_admin', 'admin', 'mod'].includes(filterRole)) {
     sql += ' AND role = ?';
@@ -73,16 +74,26 @@ get('/admin/root', requireUser, requireRootAdmin, async (ctx) => {
   }
 
   sql += ' ORDER BY created_at DESC LIMIT 150';
-  const list = db.prepare(sql).all(...params);
+  const rawList = db.prepare(sql).all(...params);
+  const list = rawList.map((u) => {
+    const warns = scalar('SELECT COUNT(*) AS n FROM warnings WHERE user_id = ?', u.id);
+    return { ...u, warning_count: warns };
+  });
 
   ctx.html(view.rootConsole(ctx, { list, q: qTerm, filterRole, stats }));
 });
 
 get('/admin', requireUser, requireStaff, async (ctx) => {
-  const isAdmin = ['admin', 'root_admin'].includes(ctx.user.role);
+  const perms = getPermissions(ctx.user);
+  if (!perms.hasAdminPanel) throw httpError(403, 'Access denied. Your staff tier operates directly on forum sections.');
+
   let tab = ctx.query.get('tab') || 'overview';
-  if (!['overview', 'users', 'stories', 'audit'].includes(tab)) tab = 'overview';
-  if (!isAdmin && (tab === 'stories' || tab === 'audit')) tab = 'overview';
+  if (!['overview', 'users', 'stories', 'audit', 'system'].includes(tab)) tab = 'overview';
+  
+  if (tab === 'users' && !perms.hasFullUsers) tab = 'overview';
+  if (tab === 'stories' && !perms.hasNews) tab = 'overview';
+  if (tab === 'audit' && !perms.hasAuditLog) tab = 'overview';
+  if (tab === 'system' && !perms.hasSystemPanel) tab = 'overview';
 
   if (config.supabase && config.supabase.enabled) {
     const { syncFromSupabase, syncLocalToSupabase } = require('../lib/supabase');
@@ -105,11 +116,29 @@ get('/admin', requireUser, requireStaff, async (ctx) => {
   } else if (tab === 'users') {
     const term = sec.cleanLine(ctx.query.get('q') || '', 40);
     const like = `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
-    data = { q: term, list: term ? q.search.all(like, like) : q.users.all() };
+    const rawList = term ? q.search.all(like, like) : q.users.all();
+    const list = rawList.map((u) => {
+      const warns = scalar('SELECT COUNT(*) AS n FROM warnings WHERE user_id = ?', u.id);
+      return { ...u, warning_count: warns };
+    });
+    data = { q: term, list };
   } else if (tab === 'stories') {
     data = { list: q.stories.all() };
   } else if (tab === 'audit') {
     data = { rows: q.audit.all() };
+  } else if (tab === 'system') {
+    let dbSize = 0;
+    try {
+      if (fs.existsSync(config.dbPath)) dbSize = fs.statSync(config.dbPath).size;
+    } catch (_) {}
+    data = {
+      dbPath: config.dbPath,
+      dbSize,
+      supabaseEnabled: Boolean(config.supabase && config.supabase.enabled),
+      userCount: scalar('SELECT COUNT(*) AS n FROM users'),
+      threadCount: scalar('SELECT COUNT(*) AS n FROM threads WHERE deleted = 0'),
+      postCount: scalar('SELECT COUNT(*) AS n FROM posts WHERE deleted = 0'),
+    };
   }
   ctx.html(view.dashboard(ctx, { tab, data }));
 });
@@ -134,6 +163,9 @@ function redirectBack(ctx) {
 }
 
 post('/admin/users/:id/ban', requireUser, requireStaff, async (ctx) => {
+  const perms = getPermissions(ctx.user);
+  if (!perms.canBan) throw httpError(403, 'You do not have permission to ban users.');
+
   const u = await targetUser(ctx);
   const isRoot = ctx.user.role === 'root_admin';
   const isAdmin = ctx.user.role === 'admin' || isRoot;
@@ -153,6 +185,9 @@ post('/admin/users/:id/ban', requireUser, requireStaff, async (ctx) => {
 });
 
 post('/admin/users/:id/unban', requireUser, requireStaff, async (ctx) => {
+  const perms = getPermissions(ctx.user);
+  if (!perms.canUnban) throw httpError(403, 'You do not have permission to unban users.');
+
   const u = await targetUser(ctx);
   const isRoot = ctx.user.role === 'root_admin';
   if ((u.role === 'admin' || u.role === 'root_admin') && !isRoot) {
@@ -166,32 +201,77 @@ post('/admin/users/:id/unban', requireUser, requireStaff, async (ctx) => {
   ctx.redirect(redirectBack(ctx));
 });
 
-post('/admin/users/:id/role', requireUser, requireRootAdmin, async (ctx) => {
+post('/admin/users/:id/warn', requireUser, requireStaff, async (ctx) => {
+  const perms = getPermissions(ctx.user);
+  if (!perms.canWarn) throw httpError(403, 'You do not have permission to issue warnings.');
   const u = await targetUser(ctx);
-  let role = sec.str(ctx.body.role, 15);
+  if (u.role === 'root_admin') throw httpError(403, 'Root administrator accounts cannot be warned.');
+  const reason = sec.cleanLine(ctx.body.reason, 200) || 'Staff moderation warning';
+  db.prepare('INSERT INTO warnings (user_id, issuer_id, reason, created_at) VALUES (?, ?, ?, ?)').run(u.id, ctx.user.id, reason, Date.now());
+  audit(ctx.user.id, 'user_warn', `${u.username}: ${reason}`, ctx.ip);
+  ctx.flash('ok', `Warning issued to ${u.username}: "${reason}".`);
+  ctx.redirect(redirectBack(ctx));
+});
+
+post('/admin/users/:id/recover', requireUser, requireStaff, async (ctx) => {
+  const perms = getPermissions(ctx.user);
+  if (!perms.canRecoverAccount) throw httpError(403, 'You do not have permission to perform account recovery.');
+  const u = await targetUser(ctx);
+  const crypto = require('node:crypto');
+  const otp = String(crypto.randomInt(100000, 999999));
+  const expiresAt = Date.now() + 15 * 60 * 1000;
+  db.prepare('INSERT INTO password_resets (user_id, otp, expires_at, created_at) VALUES (?, ?, ?, ?)').run(u.id, otp, expiresAt, Date.now());
+  db.prepare('UPDATE users SET failed_logins = 0, locked_until = 0 WHERE id = ?').run(u.id);
+  if (config.supabase && config.supabase.enabled) {
+    const { savePasswordResetOtp } = require('../lib/supabase');
+    await savePasswordResetOtp(u.id, otp, expiresAt);
+  }
+  audit(ctx.user.id, 'account_recovery', `Generated recovery OTP for ${u.username}`, ctx.ip);
+  ctx.flash('ok', `Temporary recovery OTP generated for ${u.username}: ${otp} (Valid for 15 minutes).`);
+  ctx.redirect(redirectBack(ctx));
+});
+
+post('/admin/users/:id/role', requireUser, requireStaff, async (ctx) => {
+  const perms = getPermissions(ctx.user);
+  if (!perms.canChangeRole) throw httpError(403, 'You do not have permission to assign roles.');
+
+  const u = await targetUser(ctx);
+  const isCallerRoot = ctx.user.role === 'root_admin' || (ctx.user.email && ctx.user.email.toLowerCase().trim() === config.rootAdminEmail);
+
+  // Non-root staff cannot modify a Root Admin account
+  if (!isCallerRoot && (u.role === 'root_admin' || (u.email && u.email.toLowerCase().trim() === config.rootAdminEmail))) {
+    throw httpError(403, 'Only Root Admin can modify an Executive account.');
+  }
+
   let title = sec.cleanLine(ctx.body.title, 50);
+  let role = sec.str(ctx.body.role, 15);
 
   const { findRoleByName, DEFAULT_ROLE_NAME } = require('../lib/roles');
   const cityRole = findRoleByName(title);
-  if (cityRole && !role) {
+  if (cityRole) {
+    title = cityRole.name;
     role = cityRole.systemRole;
+  } else if (!role) {
+    role = 'member';
+    title = DEFAULT_ROLE_NAME;
   }
-  if (!role) role = cityRole ? cityRole.systemRole : 'member';
 
+  // Protection: only the official root email can hold root_admin / Executive titles
   const isTargetRootEmail = u.email && u.email.toLowerCase().trim() === config.rootAdminEmail;
   if (!isTargetRootEmail) {
     if (role === 'root_admin') role = 'admin';
-    if (title === 'Project Management' || title === 'Curator Of Project' || title === 'Root Admin') {
+    if (title === 'Project Management' || title === 'Creator of Project' || title === 'Curator Of Project' || title === 'Root Admin') {
       title = 'Chief Administrator';
     }
   }
 
+  // Non-root staff cannot promote someone to Executive / Root
+  if (!isCallerRoot && (role === 'root_admin' || title === 'Project Management' || title === 'Creator of Project')) {
+    throw httpError(403, 'Only Root Admin can assign Executive titles.');
+  }
+
   const allowedRoles = isTargetRootEmail ? ['member', 'mod', 'admin', 'root_admin'] : ['member', 'mod', 'admin'];
   if (!allowedRoles.includes(role)) throw httpError(400, 'Invalid role or insufficient permissions.');
-
-  if (!title) {
-    title = role === 'root_admin' ? 'Project Management' : role === 'admin' ? 'Server Administrator' : role === 'mod' ? 'Junior Administrator' : DEFAULT_ROLE_NAME;
-  }
 
   q.role.run(role, title, u.id);
   sessions.destroyAllForUser(u.id); // force re-login so the new role takes effect cleanly
@@ -205,7 +285,9 @@ post('/admin/users/:id/role', requireUser, requireRootAdmin, async (ctx) => {
 });
 
 /* -------------------------------- News -------------------------------- */
-post('/admin/stories', requireUser, requireAdmin, (ctx) => {
+post('/admin/stories', requireUser, requireStaff, (ctx) => {
+  const perms = getPermissions(ctx.user);
+  if (!perms.hasNews) throw httpError(403, 'You do not have permission to publish news.');
   const title = sec.cleanLine(ctx.body.title, 120);
   const summary = sec.cleanLine(ctx.body.summary, 200);
   const body = sec.clean(ctx.body.body, 10000);
@@ -221,7 +303,9 @@ post('/admin/stories', requireUser, requireAdmin, (ctx) => {
   ctx.redirect('/admin?tab=stories');
 });
 
-post('/admin/stories/:id/delete', requireUser, requireAdmin, (ctx) => {
+post('/admin/stories/:id/delete', requireUser, requireStaff, (ctx) => {
+  const perms = getPermissions(ctx.user);
+  if (!perms.hasNews) throw httpError(403, 'You do not have permission to delete news.');
   const id = intParam(ctx.params.id);
   if (!id) throw httpError(404, 'Page not found');
   q.delStory.run(id);

@@ -4,12 +4,15 @@ const { db, tx, audit } = require('../lib/db');
 const sec = require('../lib/security');
 const view = require('../views/forum');
 const { httpError, requireUser, requireStaff, isStaff, intParam, pageParam } = require('./helpers');
+const { getPermissions } = require('../lib/roles');
 
 const PER_PAGE_THREADS = 20;
 const PER_PAGE_POSTS = 20;
 const MIN_GAP_MS = 20 * 1000; // minimum time between a member's posts
 const newThreadLimit = sec.limiter('new-thread', 60 * 60 * 1000, 6);
 const replyLimit = sec.limiter('reply', 60 * 60 * 1000, 30);
+
+const { touch: touchOnline, getOnlineUsers } = require('../lib/online');
 
 const q = {
   cats: db.prepare(`
@@ -18,8 +21,18 @@ const q = {
       (SELECT COUNT(*) FROM posts p JOIN threads t ON t.id = p.thread_id WHERE t.category_id = c.id AND t.deleted = 0 AND p.deleted = 0) AS post_count
     FROM categories c WHERE (c.staff_only = 0 OR ? = 1) ORDER BY c.sort_order`),
   lastThread: db.prepare(`
-    SELECT t.id, t.title, t.updated_at, u.username FROM threads t JOIN users u ON u.id = t.user_id
+    SELECT t.id, t.title, t.status, t.updated_at, u.username, u.avatar FROM threads t JOIN users u ON u.id = t.user_id
     WHERE t.category_id = ? AND t.deleted = 0 ORDER BY t.updated_at DESC LIMIT 1`),
+  latestPosts: db.prepare(`
+    SELECT t.id, t.title, t.status, t.reply_count, t.updated_at,
+           c.name AS category_name, c.slug AS category_slug,
+           u.username, u.role, u.staff_title, u.avatar
+    FROM threads t
+    JOIN categories c ON c.id = t.category_id
+    JOIN users u ON u.id = t.user_id
+    WHERE t.deleted = 0 AND (c.staff_only = 0 OR ? = 1)
+    ORDER BY t.updated_at DESC
+    LIMIT 8`),
   cat: db.prepare('SELECT * FROM categories WHERE slug = ?'),
   threadCount: db.prepare('SELECT COUNT(*) AS n FROM threads WHERE category_id = ? AND deleted = 0'),
   threads: db.prepare(`
@@ -72,17 +85,46 @@ function tooFast(userId) {
 
 /* ------------------------------- Index -------------------------------- */
 get('/forum', (ctx) => {
-  const categories = q.cats.all(isStaff(ctx.user) ? 1 : 0).map((c) => {
+  if (ctx.user) touchOnline(ctx.user);
+  const staff = isStaff(ctx.user) ? 1 : 0;
+  const categories = q.cats.all(staff).map((c) => {
     const last = q.lastThread.get(c.id);
     return {
       ...c,
       last_title: last && last.title,
       last_thread_id: last && last.id,
       last_username: last && last.username,
+      last_avatar: last && last.avatar,
+      last_status: last && last.status,
       last_at: last && last.updated_at,
     };
   });
-  ctx.html(view.index(ctx, { categories }));
+
+  const groups = {};
+  for (const c of categories) {
+    const gName = c.group_name || 'FideCity RolePlay';
+    if (!groups[gName]) groups[gName] = [];
+    groups[gName].push(c);
+  }
+
+  const latestPosts = q.latestPosts.all(staff);
+  const onlineData = getOnlineUsers(ctx.user);
+
+  ctx.html(view.index(ctx, { categories, groups, latestPosts, onlineData }));
+});
+
+get('/forum/post-thread', (ctx) => {
+  if (!ctx.user) {
+    ctx.flash('error', 'Please sign in or register to create a thread.');
+    return ctx.redirect('/login');
+  }
+  const target = db.prepare("SELECT slug FROM categories WHERE slug IN ('english-server', 'general') AND locked = 0 LIMIT 1").get();
+  ctx.redirect(`/forum/${target ? target.slug : 'general'}/new`);
+});
+
+get('/forum/mark-read', (ctx) => {
+  ctx.flash('ok', 'All forums have been marked as read.');
+  ctx.redirect('/forum');
 });
 
 /* ----------------------------- Category ------------------------------- */
@@ -143,16 +185,18 @@ get('/forum/thread/:id', (ctx) => {
   const pageNo = Math.min(pageParam(ctx), pages);
   const posts = q.posts.all(t.id, PER_PAGE_POSTS, (pageNo - 1) * PER_PAGE_POSTS);
   const thread = { ...t, first_post_id: q.firstPost.get(t.id).id };
-  ctx.html(view.thread(ctx, { t: thread, cat, posts, pageNo, pages, canReply: Boolean(ctx.user) && !t.locked }));
+  const allCategories = q.cats.all(isStaff(ctx.user) ? 1 : 0);
+  ctx.html(view.thread(ctx, { t: thread, cat, posts, pageNo, pages, canReply: Boolean(ctx.user) && !t.locked, allCategories }));
 });
 
 post('/forum/thread/:id/reply', requireUser, (ctx) => {
   const { t, cat } = visibleThread(ctx, ctx.params.id);
+  const allCategories = q.cats.all(isStaff(ctx.user) ? 1 : 0);
   const redo = (errors, draft, status = 400) => {
     const total = q.postCount.get(t.id).n;
     const pages = Math.max(1, Math.ceil(total / PER_PAGE_POSTS));
     const posts = q.posts.all(t.id, PER_PAGE_POSTS, (pages - 1) * PER_PAGE_POSTS);
-    ctx.html(view.thread(ctx, { t: { ...t, first_post_id: q.firstPost.get(t.id).id }, cat, posts, pageNo: pages, pages, canReply: true, errors, draft }), status);
+    ctx.html(view.thread(ctx, { t: { ...t, first_post_id: q.firstPost.get(t.id).id }, cat, posts, pageNo: pages, pages, canReply: true, allCategories, errors, draft }), status);
   };
   if (t.locked) throw httpError(403, 'This thread is locked.');
 
@@ -179,6 +223,8 @@ post('/forum/thread/:id/reply', requireUser, (ctx) => {
 
 /* ---------------------------- Moderation ------------------------------ */
 post('/forum/thread/:id/pin', requireUser, requireStaff, (ctx) => {
+  const perms = getPermissions(ctx.user);
+  if (!perms.canPin) throw httpError(403, 'You do not have permission to pin threads.');
   const { t } = visibleThread(ctx, ctx.params.id);
   q.pin.run(t.id);
   audit(ctx.user.id, 'thread_pin_toggle', `thread ${t.id}`, ctx.ip);
@@ -186,13 +232,44 @@ post('/forum/thread/:id/pin', requireUser, requireStaff, (ctx) => {
 });
 
 post('/forum/thread/:id/lock', requireUser, requireStaff, (ctx) => {
+  const perms = getPermissions(ctx.user);
+  if (!perms.canLock) throw httpError(403, 'You do not have permission to lock threads.');
   const { t } = visibleThread(ctx, ctx.params.id);
   q.lock.run(t.id);
   audit(ctx.user.id, 'thread_lock_toggle', `thread ${t.id}`, ctx.ip);
   ctx.redirect(`/forum/thread/${t.id}`);
 });
 
+post('/forum/thread/:id/move', requireUser, requireStaff, (ctx) => {
+  const perms = getPermissions(ctx.user);
+  if (!perms.canMove) throw httpError(403, 'You do not have permission to move threads.');
+  const { t } = visibleThread(ctx, ctx.params.id);
+  const targetCatId = intParam(ctx.body.category_id);
+  const targetCat = targetCatId && db.prepare('SELECT id, name, slug FROM categories WHERE id = ?').get(targetCatId);
+  if (!targetCat) throw httpError(400, 'Invalid category selected.');
+  db.prepare('UPDATE threads SET category_id = ? WHERE id = ?').run(targetCat.id, t.id);
+  audit(ctx.user.id, 'thread_move', `thread ${t.id} moved to ${targetCat.name}`, ctx.ip);
+  ctx.flash('ok', `Thread moved to ${targetCat.name}.`);
+  ctx.redirect(`/forum/thread/${t.id}`);
+});
+
+post('/forum/thread/:id/status', requireUser, requireStaff, (ctx) => {
+  const perms = getPermissions(ctx.user);
+  if (!perms.canTagStatus) throw httpError(403, 'You do not have permission to update thread status tags.');
+  const { t } = visibleThread(ctx, ctx.params.id);
+  const rawStatus = sec.cleanLine(ctx.body.status, 30);
+  const allowed = ['Approved', 'Rejected', 'Pending Review', ''];
+  if (!allowed.includes(rawStatus)) throw httpError(400, 'Invalid status.');
+  const val = rawStatus || null;
+  db.prepare('UPDATE threads SET status = ? WHERE id = ?').run(val, t.id);
+  audit(ctx.user.id, 'thread_status_tag', `thread ${t.id} status set to ${val || 'None'}`, ctx.ip);
+  ctx.flash('ok', val ? `Thread status updated to: ${val}.` : 'Thread status tag cleared.');
+  ctx.redirect(`/forum/thread/${t.id}`);
+});
+
 post('/forum/thread/:id/delete', requireUser, requireStaff, (ctx) => {
+  const perms = getPermissions(ctx.user);
+  if (!perms.canDelete) throw httpError(403, 'You do not have permission to delete threads.');
   const { t, cat } = visibleThread(ctx, ctx.params.id);
   q.delThread.run(t.id);
   audit(ctx.user.id, 'thread_delete', `thread ${t.id}: ${t.title}`, ctx.ip);
@@ -201,6 +278,8 @@ post('/forum/thread/:id/delete', requireUser, requireStaff, (ctx) => {
 });
 
 post('/forum/post/:id/delete', requireUser, requireStaff, (ctx) => {
+  const perms = getPermissions(ctx.user);
+  if (!perms.canDeletePost) throw httpError(403, 'You do not have permission to delete replies.');
   const id = intParam(ctx.params.id);
   const p = id && q.post.get(id);
   if (!p) throw httpError(404, 'Page not found');

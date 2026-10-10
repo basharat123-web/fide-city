@@ -4,21 +4,26 @@
   'use strict';
   document.documentElement.classList.add('js');
 
-  /* bfcache safety: always reset loader state when page is shown (back/forward navigation) */
-  window.addEventListener('pageshow', function (e) {
-    if (e.persisted) {
-      var gl = document.getElementById('fc-global-loader');
-      var tl = document.getElementById('top-loader');
-      if (gl) gl.classList.remove('is-active');
-      if (tl) tl.classList.remove('active', 'complete');
-      // Re-enable any loading buttons
-      document.querySelectorAll('.btn.is-loading').forEach(function (b) {
-        b.classList.remove('is-loading');
-        var sp = b.querySelector('.btn-spinner');
-        if (sp) sp.remove();
-      });
+  /* Loader reset utility: ensure stuck overlays never block the user */
+  function resetAllLoaders() {
+    var gl = document.getElementById('fc-global-loader');
+    var tl = document.getElementById('top-loader');
+    var ao = document.getElementById('avatar-loading-overlay');
+    if (gl) gl.classList.remove('is-active');
+    if (tl) tl.classList.remove('active', 'complete');
+    if (ao) {
+      ao.classList.remove('is-active');
+      ao.style.display = 'none';
     }
-  });
+    document.querySelectorAll('.btn.is-loading').forEach(function (b) {
+      b.classList.remove('is-loading');
+      var sp = b.querySelector('.btn-spinner');
+      if (sp) sp.remove();
+    });
+  }
+  resetAllLoaders();
+  window.addEventListener('DOMContentLoaded', resetAllLoaders);
+  window.addEventListener('pageshow', resetAllLoaders);
 
   /* Mobile menu */
   var btn = document.querySelector('[data-menu]');
@@ -112,28 +117,40 @@
   var globalLoader = document.getElementById('fc-global-loader');
   var globalLoaderMsg = document.getElementById('fc-loader-msg');
 
+  var topLoaderTimer = null;
   function startTopLoader() {
     if (!topLoader) return;
     topLoader.classList.remove('complete');
     topLoader.classList.add('active');
+    if (topLoaderTimer) clearTimeout(topLoaderTimer);
+    topLoaderTimer = setTimeout(function () {
+      finishTopLoader();
+    }, 4000);
   }
 
   function finishTopLoader() {
     if (!topLoader) return;
+    if (topLoaderTimer) { clearTimeout(topLoaderTimer); topLoaderTimer = null; }
     topLoader.classList.add('complete');
     setTimeout(function () {
       topLoader.classList.remove('active', 'complete');
     }, 400);
   }
 
+  var globalLoaderTimer = null;
   function showGlobalLoader(msg) {
     if (globalLoaderMsg && msg) globalLoaderMsg.textContent = msg;
     if (globalLoader) globalLoader.classList.add('is-active');
     startTopLoader();
+    if (globalLoaderTimer) clearTimeout(globalLoaderTimer);
+    globalLoaderTimer = setTimeout(function () {
+      hideGlobalLoader();
+    }, 6000);
   }
 
   function hideGlobalLoader() {
     if (globalLoader) globalLoader.classList.remove('is-active');
+    if (globalLoaderTimer) { clearTimeout(globalLoaderTimer); globalLoaderTimer = null; }
     finishTopLoader();
   }
 
@@ -197,10 +214,16 @@
   var avatarOverlay = document.getElementById('avatar-loading-overlay');
 
   function showAvatarSpinner() {
-    if (avatarOverlay) avatarOverlay.style.display = 'flex';
+    if (avatarOverlay) {
+      avatarOverlay.classList.add('is-active');
+      avatarOverlay.style.display = 'flex';
+    }
   }
   function hideAvatarSpinner() {
-    if (avatarOverlay) avatarOverlay.style.display = 'none';
+    if (avatarOverlay) {
+      avatarOverlay.classList.remove('is-active');
+      avatarOverlay.style.display = 'none';
+    }
   }
 
   function updateAvatarPreview(src) {
@@ -290,4 +313,59 @@
       }
     });
   }
+
+  /* Forum UI interactions: Collapse sections, search box toggle, subnav dropdowns */
+  document.addEventListener('click', function (e) {
+    var collapseBtn = e.target.closest('[data-toggle-target]');
+    if (collapseBtn) {
+      var targetId = collapseBtn.getAttribute('data-toggle-target');
+      var section = document.getElementById(targetId);
+      if (section) {
+        section.classList.toggle('is-collapsed');
+      }
+      return;
+    }
+
+    var toggleAll = e.target.closest('#toggle-all-sections');
+    if (toggleAll) {
+      var allSections = document.querySelectorAll('.fc-category-section');
+      var anyExpanded = false;
+      allSections.forEach(function (s) {
+        if (!s.classList.contains('is-collapsed')) anyExpanded = true;
+      });
+      allSections.forEach(function (s) {
+        if (anyExpanded) s.classList.add('is-collapsed');
+        else s.classList.remove('is-collapsed');
+      });
+      return;
+    }
+
+    var searchToggle = e.target.closest('#btn-toggle-search');
+    if (searchToggle) {
+      e.preventDefault();
+      var sBox = document.getElementById('forum-search-box');
+      if (sBox) {
+        var isHidden = sBox.style.display === 'none' || !sBox.style.display;
+        sBox.style.display = isHidden ? 'block' : 'none';
+        if (isHidden) {
+          var input = sBox.querySelector('input');
+          if (input) input.focus();
+        }
+      }
+      return;
+    }
+
+    var dropBtn = e.target.closest('.dropdown-toggle');
+    if (dropBtn) {
+      var dropWrap = dropBtn.closest('.subnav-dropdown');
+      if (dropWrap) {
+        dropWrap.classList.toggle('is-open');
+        dropBtn.setAttribute('aria-expanded', dropWrap.classList.contains('is-open') ? 'true' : 'false');
+      }
+    } else {
+      document.querySelectorAll('.subnav-dropdown.is-open').forEach(function (d) {
+        d.classList.remove('is-open');
+      });
+    }
+  });
 })();

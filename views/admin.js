@@ -1,13 +1,27 @@
 'use strict';
 const { html } = require('../lib/html');
 const { page, csrfField, fmtDate, fmtDateTime } = require('./layout');
+const { getPermissions, getRoleMeta, CITY_ROLES } = require('../lib/roles');
+const config = require('../lib/config');
 
-function tabs(active, isAdmin) {
-  const items = [
-    ['overview', 'Overview'],
-    ['users', 'Members'],
-    ...(isAdmin ? [['stories', 'News'], ['audit', 'Security log']] : []),
-  ];
+function cityRoleBadge(u) {
+  const meta = getRoleMeta(u);
+  const isPrimaryPlayer = meta.name === 'EN | Player';
+  return html`
+    <span class="badge" style="background: ${meta.color}25; border: 1.5px solid ${meta.color}88; color: ${meta.color}; font-weight: 800; font-size: 0.76rem; letter-spacing: 0.03em;">${meta.icon} ${meta.name}</span>
+    ${!isPrimaryPlayer
+      ? html`<span class="badge" style="background: rgba(244, 63, 94, 0.18); border: 1.5px solid rgba(244, 63, 94, 0.5); color: #f43f5e; font-weight: 800; font-size: 0.74rem; letter-spacing: 0.02em; margin-top: 0.2rem; display: inline-block;">🎮 EN | Player</span>`
+      : ''}
+  `;
+}
+
+function tabs(active, perms) {
+  const items = [['overview', 'Overview']];
+  if (perms.hasFullUsers) items.push(['users', 'Members']);
+  if (perms.hasSystemPanel) items.push(['system', 'System & DB']);
+  if (perms.hasNews) items.push(['stories', 'News']);
+  if (perms.hasAuditLog) items.push(['audit', 'Security log']);
+  
   return html`<nav class="tabs" aria-label="Staff sections"><ul>
     ${items.map(([k, label]) => html`<li><a href="/admin?tab=${k}"${active === k ? html` aria-current="page"` : ''}>${label}</a></li>`)}
   </ul></nav>`;
@@ -22,19 +36,11 @@ function overview(ctx, { stats }) {
     <div><dt>Banned</dt><dd>${stats.banned}</dd></div>
     <div><dt>Active sessions</dt><dd>${stats.sessions}</dd></div>
   </dl>
-  <p class="muted">Moderators can pin, lock and delete threads and replies on the forum, and ban members from the Members tab. Admins can also manage roles, news and the security log.</p>`;
+  <p class="muted">Moderator access is strictly tiered according to the Fide City official permission architecture. Actions are recorded in the security audit log.</p>`;
 }
 
-function roleBadge(role) {
-  if (role === 'root_admin') return html`<span class="badge badge-root">👑 Root Admin</span>`;
-  if (role === 'admin') return html`<span class="badge badge-admin">Admin</span>`;
-  if (role === 'mod') return html`<span class="badge badge-mod">Moderator</span>`;
-  return html`<span class="badge badge-quiet">Member</span>`;
-}
-
-function users(ctx, { list, q }) {
-  const isRoot = ctx.user.role === 'root_admin';
-  const isAdmin = ctx.user.role === 'admin' || isRoot;
+function users(ctx, { list, q, perms }) {
+  const isRoot = ctx.user.role === 'root_admin' || (ctx.user.email && ctx.user.email.toLowerCase().trim() === config.rootAdminEmail);
   return html`<form class="inline-search" method="get" action="/admin" role="search">
       <input type="hidden" name="tab" value="users">
       <label for="q" class="sr">Search members</label>
@@ -43,12 +49,17 @@ function users(ctx, { list, q }) {
     </form>
     <div class="table-scroll">
     <table class="data">
-      <thead><tr><th scope="col">Member</th><th scope="col">Role</th><th scope="col">Joined</th><th scope="col">Last sign-in</th><th scope="col">Actions</th></tr></thead>
+      <thead><tr><th scope="col">Member</th><th scope="col">Role & Title</th><th scope="col">Joined</th><th scope="col">Last sign-in</th><th scope="col">Actions</th></tr></thead>
       <tbody>
       ${list.map(
         (u) => html`<tr>
-          <th scope="row"><strong>${u.username}</strong><br><span class="muted">${u.email}</span>${u.banned ? html`<br><span class="badge badge-danger">Banned</span> <span class="muted">${u.ban_reason || ''}</span>` : ''}</th>
-          <td>${roleBadge(u.role)}${u.staff_title ? html`<br><span class="muted">${u.staff_title}</span>` : ''}</td>
+          <th scope="row">
+            <strong>${u.username}</strong><br>
+            <span class="muted">${u.email}</span>
+            ${u.banned ? html`<br><span class="badge badge-danger">Banned</span> <span class="muted">${u.ban_reason || ''}</span>` : ''}
+            ${u.warning_count ? html`<br><span class="badge" style="background: rgba(234, 179, 8, 0.18); border: 1px solid #eab308; color: #facc15; font-size: 0.72rem; font-weight: 700; margin-top: 0.2rem; display: inline-block;">⚠️ ${u.warning_count} ${u.warning_count === 1 ? 'Warning' : 'Warnings'}</span>` : ''}
+          </th>
+          <td>${cityRoleBadge(u)}</td>
           <td>${fmtDate(u.created_at)}</td>
           <td>${u.last_login ? fmtDateTime(u.last_login) : 'Never'}</td>
           <td class="actions">
@@ -56,23 +67,46 @@ function users(ctx, { list, q }) {
               ? html`<span class="muted">You</span>`
               : html`
                 ${u.banned
-                  ? (isRoot || u.role === 'member' || (u.role === 'mod' && isAdmin))
-                    ? html`<form method="post" action="/admin/users/${u.id}/unban">${csrfField(ctx)}<button class="btn btn-ghost btn-sm" type="submit">Unban</button></form>`
+                  ? perms.canUnban
+                    ? html`<form method="post" action="/admin/users/${u.id}/unban">${csrfField(ctx)}<button class="btn btn-ghost btn-sm" type="submit" style="color: #4ade80;">Unban</button></form>`
                     : ''
                   : u.role === 'root_admin'
                     ? html`<span class="muted">Protected</span>`
-                    : (u.role === 'member' || (u.role === 'mod' && isAdmin) || (u.role === 'admin' && isRoot))
-                      ? html`<form method="post" action="/admin/users/${u.id}/ban" class="row-form">${csrfField(ctx)}<label class="sr" for="reason-${u.id}">Ban reason</label><input id="reason-${u.id}" name="reason" placeholder="Reason" maxlength="200" required><button class="btn btn-danger btn-sm" type="submit">Ban</button></form>`
+                    : (perms.canBan && (u.role !== 'admin' || isRoot))
+                      ? html`<form method="post" action="/admin/users/${u.id}/ban" class="row-form">${csrfField(ctx)}<label class="sr" for="reason-${u.id}">Ban reason</label><input id="reason-${u.id}" name="reason" placeholder="Ban reason" maxlength="200" required><button class="btn btn-danger btn-sm" type="submit">Ban</button></form>`
                       : ''}
-                ${(isRoot || (isAdmin && u.role !== 'admin' && u.role !== 'root_admin'))
-                  ? html`<form method="post" action="/admin/users/${u.id}/role" class="row-form">${csrfField(ctx)}
-                      <label class="sr" for="role-${u.id}">Role</label>
-                      <select id="role-${u.id}" name="role">
-                        ${(isRoot ? ['member', 'mod', 'admin', 'root_admin'] : ['member', 'mod']).map((r) => html`<option value="${r}"${u.role === r ? html` selected` : ''}>${r}</option>`)}
+
+                ${perms.canWarn && u.role !== 'root_admin'
+                  ? html`<form method="post" action="/admin/users/${u.id}/warn" class="row-form">${csrfField(ctx)}<label class="sr" for="warn-${u.id}">Warning reason</label><input id="warn-${u.id}" name="reason" placeholder="Reason" maxlength="200" required><button class="btn btn-ghost btn-sm" type="submit" style="color: #facc15;">Warn</button></form>`
+                  : ''}
+
+                ${perms.canRecoverAccount
+                  ? html`<form method="post" action="/admin/users/${u.id}/recover">${csrfField(ctx)}<button class="btn btn-ghost btn-sm" type="submit" title="Generate temporary recovery OTP code">🔑 Recover</button></form>`
+                  : ''}
+
+                ${perms.canChangeRole && (u.role !== 'root_admin' || isRoot)
+                  ? html`<form method="post" action="/admin/users/${u.id}/role" class="row-form role-update-form" style="display:inline-flex; align-items:center; gap:0.4rem; margin:0.25rem 0;">${csrfField(ctx)}
+                      <label class="sr" for="role-sel-${u.id}">City Role</label>
+                      <select id="role-sel-${u.id}" name="title" style="padding: 0.35rem 0.6rem; border-radius: 6px; font-weight: 700; font-size: 0.8rem; background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: #fff; max-width: 220px; cursor: pointer;">
+                        ${isRoot ? html`
+                          <optgroup label="👑 Executive Management">
+                            ${CITY_ROLES.filter((r) => r.category === 'Executive' && (u.email && u.email.toLowerCase().trim() === config.rootAdminEmail ? true : r.systemRole !== 'root_admin')).map((r) => html`<option value="${r.name}"${(u.staff_title || '') === r.name ? html` selected` : ''}>${r.icon} ${r.name}</option>`)}
+                          </optgroup>
+                        ` : ''}
+                        <optgroup label="🛡️ Operations & Administration">
+                          ${CITY_ROLES.filter((r) => (r.category === 'Operations Head' || r.category === 'Engineering') && r.systemRole !== 'root_admin').map((r) => html`<option value="${r.name}"${(u.staff_title || '') === r.name ? html` selected` : ''}>${r.icon} ${r.name}</option>`)}
+                        </optgroup>
+                        <optgroup label="⚔️ Staff & Moderation">
+                          ${CITY_ROLES.filter((r) => (r.category === 'Senior Staff' || r.category === 'Field Staff' || r.category === 'Staff')).map((r) => html`<option value="${r.name}"${u.staff_title === r.name ? html` selected` : ''}>${r.icon} ${r.name}</option>`)}
+                        </optgroup>
+                        <optgroup label="🏛️ City & Faction Leadership">
+                          ${CITY_ROLES.filter((r) => r.category === 'City Leadership').map((r) => html`<option value="${r.name}"${u.staff_title === r.name ? html` selected` : ''}>${r.icon} ${r.name}</option>`)}
+                        </optgroup>
+                        <optgroup label="🎮 Community & Citizens">
+                          ${CITY_ROLES.filter((r) => r.category === 'Community').map((r) => html`<option value="${r.name}"${(u.staff_title || 'EN | Player') === r.name ? html` selected` : ''}>${r.icon} ${r.name}</option>`)}
+                        </optgroup>
                       </select>
-                      <label class="sr" for="title-${u.id}">Staff title</label>
-                      <input id="title-${u.id}" name="title" value="${u.staff_title || ''}" placeholder="Staff title" maxlength="40">
-                      <button class="btn btn-ghost btn-sm" type="submit">Save</button>
+                      <button class="btn btn-ghost btn-sm" type="submit" style="color: #60a5fa; border-color: rgba(96, 165, 250, 0.4); padding: 0.35rem 0.65rem;">Save Role</button>
                     </form>`
                   : ''}`}
           </td>
@@ -80,6 +114,29 @@ function users(ctx, { list, q }) {
       )}
       </tbody>
     </table></div>`;
+}
+
+function systemView(ctx, data) {
+  return html`
+    <div class="card" style="padding: 1.6rem; border: 1px solid var(--border); border-radius: 12px; background: rgba(255, 255, 255, 0.02);">
+      <h2 style="margin-top:0;">🔧 Technical & Database Operations</h2>
+      <p class="muted">Access restricted to Engineering (Technical Administrator) and Executive (Root Admin). Manage database state and sync.</p>
+      
+      <dl class="stat-grid" style="margin-top: 1.2rem;">
+        <div><dt>Database Storage</dt><dd style="font-size: 0.88rem; font-family: monospace;">${(data.dbSize / 1024).toFixed(1)} KB</dd></div>
+        <div><dt>Total Citizens</dt><dd>${data.userCount}</dd></div>
+        <div><dt>Active Threads</dt><dd>${data.threadCount}</dd></div>
+        <div><dt>Total Posts</dt><dd>${data.postCount}</dd></div>
+        <div><dt>Cloud Sync Status</dt><dd style="color: ${data.supabaseEnabled ? '#4ade80' : '#94a3b8'};">${data.supabaseEnabled ? 'Supabase Active' : 'Local SQLite'}</dd></div>
+        <div><dt>Journal Mode</dt><dd style="font-size: 0.88rem; font-family: monospace;">WAL Mode</dd></div>
+      </dl>
+
+      <div style="margin-top: 1.6rem; display: flex; gap: 0.8rem; flex-wrap: wrap;">
+        <a class="btn btn-primary btn-sm" href="/api/sync" target="_blank">🔄 Force Supabase Sync</a>
+        <a class="btn btn-ghost btn-sm" href="/api/status" target="_blank">📡 View API Health Endpoint</a>
+      </div>
+    </div>
+  `;
 }
 
 function stories(ctx, { list, errors = {}, values = {} }) {
@@ -115,31 +172,19 @@ function audit(ctx, { rows }) {
 }
 
 function dashboard(ctx, { tab, data }) {
-  const isAdmin = ['admin', 'root_admin'].includes(ctx.user.role);
+  const perms = getPermissions(ctx.user);
   let inner;
-  if (tab === 'users') inner = users(ctx, data);
+  if (tab === 'users') inner = users(ctx, { ...data, perms });
+  else if (tab === 'system') inner = systemView(ctx, data);
   else if (tab === 'stories') inner = stories(ctx, data);
   else if (tab === 'audit') inner = audit(ctx, data);
   else inner = overview(ctx, data);
   const body = html`<div class="wrap">
     <h1 class="page-title">Staff dashboard</h1>
-    ${tabs(tab, isAdmin)}
+    ${tabs(tab, perms)}
     <div class="admin-panel">${inner}</div>
   </div>`;
   return page(ctx, { title: 'Staff dashboard', body, robots: 'noindex, nofollow' });
-}
-
-const { CITY_ROLES, getRoleMeta } = require('../lib/roles');
-
-function cityRoleBadge(u) {
-  const meta = getRoleMeta(u);
-  const isPrimaryPlayer = meta.name === 'EN | Player';
-  return html`
-    <span class="badge" style="background: ${meta.color}25; border: 1.5px solid ${meta.color}88; color: ${meta.color}; font-weight: 800; font-size: 0.76rem; letter-spacing: 0.03em;">${meta.icon} ${meta.name}</span>
-    ${!isPrimaryPlayer
-      ? html`<span class="badge" style="background: rgba(244, 63, 94, 0.18); border: 1.5px solid rgba(244, 63, 94, 0.5); color: #f43f5e; font-weight: 800; font-size: 0.74rem; letter-spacing: 0.02em;">🎮 EN | Player</span>`
-      : ''}
-  `;
 }
 
 function rootConsole(ctx, { list, q = '', filterRole = 'all', stats = {} }) {

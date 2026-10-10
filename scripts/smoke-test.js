@@ -61,7 +61,7 @@ class Client {
 async function main() {
   // Seed an admin directly in the DB.
   const adminHash = await sec.hashPassword('Correct-Horse-Battery-9');
-  db.prepare("INSERT INTO users (username, email, password_hash, role, staff_title, created_at) VALUES ('boss', 'boss@example.com', ?, 'admin', 'Owner', ?)").run(adminHash, Date.now());
+  db.prepare("INSERT INTO users (username, email, password_hash, role, staff_title, created_at) VALUES ('boss', 'boss@example.com', ?, 'admin', 'Chief Administrator', ?)").run(adminHash, Date.now());
 
   const server = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', path.join(__dirname, '..', 'server.js')], { env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = '';

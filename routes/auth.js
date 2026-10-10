@@ -330,10 +330,14 @@ post('/reset-password', async (ctx) => {
 });
 
 /* ------------------------------- Account ------------------------------ */
+let lastAccountSync = 0;
 get('/account', requireUser, async (ctx) => {
-  if (config.supabase && config.supabase.enabled) {
-    const { syncFromSupabase } = require('../lib/supabase');
-    await syncFromSupabase();
+  if (config.supabase && config.supabase.enabled && Date.now() - lastAccountSync > 60000) {
+    lastAccountSync = Date.now();
+    try {
+      const { syncFromSupabase } = require('../lib/supabase');
+      await syncFromSupabase();
+    } catch (_) {}
   }
   const loadUser = db.prepare('SELECT id, username, email, role, staff_title, avatar, created_at, banned FROM users WHERE id = ?');
   ctx.user = loadUser.get(ctx.user.id) || ctx.user;
