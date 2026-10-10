@@ -7,7 +7,13 @@ const isStaff = (u) => u && ['mod', 'admin', 'root_admin'].includes(u.role);
 
 const roleBadge = (u) => {
   const meta = getRoleMeta(u);
-  return html`<span class="badge" style="background: ${meta.color}25; border: 1px solid ${meta.color}77; color: ${meta.color}; font-weight: 700; font-size: 0.72rem; letter-spacing: 0.03em;">${meta.icon} ${meta.name}</span>`;
+  const isPrimaryPlayer = meta.name === 'EN | Player';
+  return html`
+    <span class="badge" style="background: ${meta.color}25; border: 1px solid ${meta.color}77; color: ${meta.color}; font-weight: 700; font-size: 0.72rem; letter-spacing: 0.03em;">${meta.icon} ${meta.name}</span>
+    ${!isPrimaryPlayer
+      ? html`<span class="badge" style="background: rgba(244, 63, 94, 0.18); border: 1px solid rgba(244, 63, 94, 0.5); color: #f43f5e; font-weight: 700; font-size: 0.68rem; margin-top: 0.2rem; display: inline-block;">🎮 EN | Player</span>`
+      : ''}
+  `;
 };
 
 function crumbs(items) {

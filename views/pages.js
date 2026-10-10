@@ -334,7 +334,8 @@ function account(ctx, { errors = {} } = {}) {
     <dl class="facts">
       <div><dt>Username</dt><dd>${u.username}</dd></div>
       <div><dt>Email</dt><dd>${u.email}</dd></div>
-      <div><dt>City Role</dt><dd><span class="badge" style="background: ${meta.color}25; border: 1.5px solid ${meta.color}88; color: ${meta.color}; font-weight: 800; font-size: 0.88rem; padding: 0.3rem 0.85rem;">${meta.icon} ${meta.name}</span></dd></div>
+      <div><dt>Assigned Role</dt><dd><span class="badge" style="background: ${meta.color}25; border: 1.5px solid ${meta.color}88; color: ${meta.color}; font-weight: 800; font-size: 0.88rem; padding: 0.3rem 0.85rem;">${meta.icon} ${meta.name}</span></dd></div>
+      <div><dt>Citizen Role</dt><dd><span class="badge" style="background: rgba(244, 63, 94, 0.18); border: 1.5px solid rgba(244, 63, 94, 0.5); color: #f43f5e; font-weight: 800; font-size: 0.84rem; padding: 0.25rem 0.75rem;">🎮 EN | Player (Permanent)</span></dd></div>
       <div><dt>Joined</dt><dd>${fmtDate(u.created_at)}</dd></div>
       ${u.role === 'root_admin'
         ? html`<div style="grid-column: 1 / -1; margin-top: 0.6rem;"><a class="btn btn-primary" href="/admin/root" style="background: linear-gradient(135deg, #f8c040, #fd20d7); font-weight: 800; color: #14011c;">👑 Open Root Admin Master Console</a></div>`

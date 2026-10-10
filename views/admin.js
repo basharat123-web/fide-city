@@ -133,7 +133,13 @@ const { CITY_ROLES, getRoleMeta } = require('../lib/roles');
 
 function cityRoleBadge(u) {
   const meta = getRoleMeta(u);
-  return html`<span class="badge" style="background: ${meta.color}25; border: 1.5px solid ${meta.color}88; color: ${meta.color}; font-weight: 800; font-size: 0.76rem; letter-spacing: 0.03em;">${meta.icon} ${meta.name}</span>`;
+  const isPrimaryPlayer = meta.name === 'EN | Player';
+  return html`
+    <span class="badge" style="background: ${meta.color}25; border: 1.5px solid ${meta.color}88; color: ${meta.color}; font-weight: 800; font-size: 0.76rem; letter-spacing: 0.03em;">${meta.icon} ${meta.name}</span>
+    ${!isPrimaryPlayer
+      ? html`<span class="badge" style="background: rgba(244, 63, 94, 0.18); border: 1.5px solid rgba(244, 63, 94, 0.5); color: #f43f5e; font-weight: 800; font-size: 0.74rem; letter-spacing: 0.02em;">🎮 EN | Player</span>`
+      : ''}
+  `;
 }
 
 function rootConsole(ctx, { list, q = '', filterRole = 'all', stats = {} }) {
@@ -143,7 +149,7 @@ function rootConsole(ctx, { list, q = '', filterRole = 'all', stats = {} }) {
     ['admin', `🛡️ Admins (${stats.admins || 0})`],
     ['mod', `⚔️ Staff (${stats.mods || 0})`],
     ['leadership', `🏛️ City Leaders`],
-    ['member', `🎮 EN | Players (${stats.members || 0})`],
+    ['member', `🎮 EN | Players (${stats.players !== undefined ? stats.players : stats.users || 0})`],
     ['banned', `🚫 Blocked (${stats.banned || 0})`],
   ];
 

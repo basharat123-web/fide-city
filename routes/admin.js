@@ -47,6 +47,7 @@ get('/admin/root', requireUser, requireRootAdmin, async (ctx) => {
     admins: scalar("SELECT COUNT(*) AS n FROM users WHERE role = 'admin'"),
     mods: scalar("SELECT COUNT(*) AS n FROM users WHERE role = 'mod'"),
     members: scalar("SELECT COUNT(*) AS n FROM users WHERE role = 'member'"),
+    players: scalar("SELECT COUNT(*) AS n FROM users WHERE banned = 0"),
     banned: scalar('SELECT COUNT(*) AS n FROM users WHERE banned = 1'),
   };
 
@@ -57,7 +58,10 @@ get('/admin/root', requireUser, requireRootAdmin, async (ctx) => {
     sql += ' AND banned = 1';
   } else if (filterRole === 'leadership') {
     sql += " AND staff_title IN ('Governor', 'Election Commissioner', 'Faction Leader', 'State Leader', 'Crime Leader', 'State Deputy', 'Crime Deputy', 'Weazel News')";
-  } else if (['root_admin', 'admin', 'mod', 'member'].includes(filterRole)) {
+  } else if (filterRole === 'member') {
+    // EN | Player is the permanent citizen role held by all active citizens
+    sql += ' AND banned = 0';
+  } else if (['root_admin', 'admin', 'mod'].includes(filterRole)) {
     sql += ' AND role = ?';
     params.push(filterRole);
   }
