@@ -109,9 +109,14 @@ get('/admin', requireUser, requireStaff, async (ctx) => {
 });
 
 /* --------------------------- Member moderation ------------------------ */
-function targetUser(ctx) {
+async function targetUser(ctx) {
   const id = intParam(ctx.params.id);
-  const u = id && q.user.get(id);
+  let u = id && q.user.get(id);
+  if (!u && config.supabase && config.supabase.enabled) {
+    const { syncFromSupabase } = require('../lib/supabase');
+    await syncFromSupabase();
+    u = id && q.user.get(id);
+  }
   if (!u) throw httpError(404, 'Page not found');
   if (u.id === ctx.user.id) throw httpError(400, 'You cannot do that to your own account.');
   return u;
@@ -122,8 +127,8 @@ function redirectBack(ctx) {
   return ref.includes('/admin/root') ? '/admin/root' : '/admin?tab=users';
 }
 
-post('/admin/users/:id/ban', requireUser, requireStaff, (ctx) => {
-  const u = targetUser(ctx);
+post('/admin/users/:id/ban', requireUser, requireStaff, async (ctx) => {
+  const u = await targetUser(ctx);
   const isRoot = ctx.user.role === 'root_admin';
   const isAdmin = ctx.user.role === 'admin' || isRoot;
 
@@ -135,28 +140,28 @@ post('/admin/users/:id/ban', requireUser, requireStaff, (ctx) => {
   q.ban.run(reason, u.id);
   sessions.destroyAllForUser(u.id);
   const { updateUserBan } = require('../lib/supabase');
-  updateUserBan(u.username, 1, reason);
+  await updateUserBan(u.username, 1, reason);
   audit(ctx.user.id, 'user_ban', `${u.username}: ${reason}`, ctx.ip);
   ctx.flash('ok', `${u.username} was banned.`);
   ctx.redirect(redirectBack(ctx));
 });
 
-post('/admin/users/:id/unban', requireUser, requireStaff, (ctx) => {
-  const u = targetUser(ctx);
+post('/admin/users/:id/unban', requireUser, requireStaff, async (ctx) => {
+  const u = await targetUser(ctx);
   const isRoot = ctx.user.role === 'root_admin';
   if ((u.role === 'admin' || u.role === 'root_admin') && !isRoot) {
     throw httpError(403, 'Only Root Admin can unban this account.');
   }
   q.unban.run(u.id);
   const { updateUserBan } = require('../lib/supabase');
-  updateUserBan(u.username, 0, null);
+  await updateUserBan(u.username, 0, null);
   audit(ctx.user.id, 'user_unban', u.username, ctx.ip);
   ctx.flash('ok', `${u.username} was unbanned.`);
   ctx.redirect(redirectBack(ctx));
 });
 
-post('/admin/users/:id/role', requireUser, requireAdmin, (ctx) => {
-  const u = targetUser(ctx);
+post('/admin/users/:id/role', requireUser, requireAdmin, async (ctx) => {
+  const u = await targetUser(ctx);
   const isRoot = ctx.user.role === 'root_admin';
   const role = sec.str(ctx.body.role, 15);
 
@@ -172,7 +177,7 @@ post('/admin/users/:id/role', requireUser, requireAdmin, (ctx) => {
   sessions.destroyAllForUser(u.id); // force re-login so the new role takes effect cleanly
 
   const { updateUserRole } = require('../lib/supabase');
-  updateUserRole(u.username, role, role === 'member' ? null : title);
+  await updateUserRole(u.username, role, role === 'member' ? null : title);
 
   audit(ctx.user.id, 'user_role', `${u.username}: ${u.role} -> ${role}`, ctx.ip);
   ctx.flash('ok', `${u.username} is now ${role}.`);

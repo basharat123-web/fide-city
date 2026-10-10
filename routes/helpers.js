@@ -13,15 +13,48 @@ function requireUser(ctx) {
 }
 
 /** Middleware: moderators, admins, and root admins. Non-staff get a plain 404 so staff URLs are not advertised. */
-function requireStaff(ctx) {
+async function requireStaff(ctx) {
+  if (!ctx.user) throw httpError(404, 'Page not found');
+  if (!['mod', 'admin', 'root_admin'].includes(ctx.user.role)) {
+    const config = require('../lib/config');
+    if (config.supabase && config.supabase.enabled) {
+      const { syncFromSupabase } = require('../lib/supabase');
+      await syncFromSupabase();
+      const { db } = require('../lib/db');
+      const u = db.prepare('SELECT id, username, email, role, staff_title, created_at, banned FROM users WHERE id = ?').get(ctx.user.id);
+      if (u) ctx.user = u;
+    }
+  }
   if (!ctx.user || !['mod', 'admin', 'root_admin'].includes(ctx.user.role)) throw httpError(404, 'Page not found');
 }
 
-function requireAdmin(ctx) {
+async function requireAdmin(ctx) {
+  if (!ctx.user) throw httpError(404, 'Page not found');
+  if (!['admin', 'root_admin'].includes(ctx.user.role)) {
+    const config = require('../lib/config');
+    if (config.supabase && config.supabase.enabled) {
+      const { syncFromSupabase } = require('../lib/supabase');
+      await syncFromSupabase();
+      const { db } = require('../lib/db');
+      const u = db.prepare('SELECT id, username, email, role, staff_title, created_at, banned FROM users WHERE id = ?').get(ctx.user.id);
+      if (u) ctx.user = u;
+    }
+  }
   if (!ctx.user || !['admin', 'root_admin'].includes(ctx.user.role)) throw httpError(404, 'Page not found');
 }
 
-function requireRootAdmin(ctx) {
+async function requireRootAdmin(ctx) {
+  if (!ctx.user) throw httpError(404, 'Page not found');
+  if (ctx.user.role !== 'root_admin') {
+    const config = require('../lib/config');
+    if (config.supabase && config.supabase.enabled) {
+      const { syncFromSupabase } = require('../lib/supabase');
+      await syncFromSupabase();
+      const { db } = require('../lib/db');
+      const u = db.prepare('SELECT id, username, email, role, staff_title, created_at, banned FROM users WHERE id = ?').get(ctx.user.id);
+      if (u) ctx.user = u;
+    }
+  }
   if (!ctx.user || ctx.user.role !== 'root_admin') throw httpError(404, 'Page not found');
 }
 
