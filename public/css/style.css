@@ -932,6 +932,197 @@ table.data tr:last-child td, table.data tr:last-child th { border-bottom: 0; }
   .user-card-actions { padding-left: 0; border-left: 0; border-top: 1px solid var(--line-soft); padding-top: 1rem; }
 }
 
+/* =====================================================================
+   Professional Animated Loading & Spinner System (GTA V / Fide City Cyber Theme)
+   ===================================================================== */
+
+/* 1. Top Screen Glowing Progress Bar */
+.top-loader {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3.5px;
+  width: 0%;
+  background: linear-gradient(90deg, #f8c040, #fd20d7, #720dbd, #06b6d4);
+  background-size: 300% 100%;
+  z-index: 10000;
+  pointer-events: none;
+  opacity: 0;
+  transition: width 0.3s ease, opacity 0.3s ease;
+  box-shadow: 0 0 12px rgba(253, 32, 215, 0.8), 0 0 24px rgba(248, 192, 64, 0.6);
+  animation: fc-gradient-shift 1.8s linear infinite;
+}
+.top-loader.active {
+  opacity: 1;
+  width: 72%;
+  transition: width 1.2s cubic-bezier(0.1, 0.5, 0.2, 1);
+}
+.top-loader.complete {
+  width: 100%;
+  opacity: 1;
+  transition: width 0.2s ease;
+}
+
+@keyframes fc-gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* 2. Fullscreen Futuristic Holographic Loader Overlay */
+.fc-loader-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 1, 31, 0.84);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.25s ease, visibility 0.25s ease;
+}
+.fc-loader-overlay.is-active {
+  opacity: 1;
+  visibility: visible;
+}
+.fc-loader-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2.2rem 3.2rem;
+  background: radial-gradient(circle at center, rgba(46, 3, 143, 0.6), rgba(20, 1, 28, 0.95));
+  border: 1.5px solid rgba(253, 32, 215, 0.4);
+  border-radius: 20px;
+  box-shadow: 0 0 40px rgba(114, 13, 189, 0.5), 0 0 80px rgba(253, 32, 215, 0.2), inset 0 0 20px rgba(248, 192, 64, 0.1);
+  text-align: center;
+  animation: fc-card-pulse 2s ease-in-out infinite alternate;
+}
+
+@keyframes fc-card-pulse {
+  0% { box-shadow: 0 0 30px rgba(114, 13, 189, 0.4), 0 0 60px rgba(253, 32, 215, 0.15); }
+  100% { box-shadow: 0 0 50px rgba(114, 13, 189, 0.7), 0 0 100px rgba(253, 32, 215, 0.35); }
+}
+
+/* 3. Concentric Multi-Ring Gyroscope Spinner */
+.fc-spinner-rings {
+  position: relative;
+  width: 76px;
+  height: 76px;
+  margin-bottom: 1.4rem;
+}
+.fc-spinner-rings .ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 3px solid transparent;
+}
+.fc-spinner-rings .ring-outer {
+  border-top-color: var(--magenta);
+  border-bottom-color: var(--violet);
+  animation: fc-spin 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+  box-shadow: 0 0 15px rgba(253, 32, 215, 0.4);
+}
+.fc-spinner-rings .ring-middle {
+  inset: 8px;
+  border-left-color: var(--gold);
+  border-right-color: var(--gold-hi);
+  animation: fc-spin-reverse 0.9s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+  box-shadow: 0 0 12px rgba(248, 192, 64, 0.4);
+}
+.fc-spinner-rings .ring-inner {
+  inset: 16px;
+  border-top-color: #06b6d4;
+  border-left-color: #2dd4bf;
+  animation: fc-spin 0.6s linear infinite;
+}
+.fc-spinner-rings .ring-core {
+  position: absolute;
+  inset: 26px;
+  background: radial-gradient(circle, #ffd466, #fd20d7);
+  border-radius: 50%;
+  box-shadow: 0 0 18px #fd20d7;
+  animation: fc-core-pulse 1s ease-in-out infinite alternate;
+}
+
+@keyframes fc-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+@keyframes fc-spin-reverse {
+  0% { transform: rotate(360deg); }
+  100% { transform: rotate(0deg); }
+}
+@keyframes fc-core-pulse {
+  0% { transform: scale(0.75); opacity: 0.6; }
+  100% { transform: scale(1.15); opacity: 1; }
+}
+
+.fc-loader-text {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #fff;
+  text-shadow: 0 0 10px rgba(253, 32, 215, 0.8), 0 0 20px rgba(248, 192, 64, 0.6);
+  margin-bottom: 0.25rem;
+}
+.fc-loader-sub {
+  font-size: 0.82rem;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* 4. Avatar Upload Box Overlay Spinner */
+.avatar-spinner-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(16, 1, 31, 0.82);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  z-index: 5;
+}
+.spinner-ring-mini {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 3px solid rgba(253, 32, 215, 0.2);
+  border-top-color: var(--gold);
+  border-right-color: var(--magenta);
+  animation: fc-spin 0.65s linear infinite;
+  box-shadow: 0 0 14px rgba(253, 32, 215, 0.7);
+}
+
+/* 5. Button Animated Spinner (.is-loading) */
+.btn-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(20, 1, 28, 0.25);
+  border-top-color: currentColor;
+  border-right-color: currentColor;
+  border-radius: 50%;
+  animation: fc-spin 0.6s linear infinite;
+  margin-right: 0.45rem;
+  vertical-align: -2px;
+}
+.btn-ghost .btn-spinner, .btn-danger .btn-spinner {
+  border-color: rgba(255, 255, 255, 0.2);
+  border-top-color: currentColor;
+}
+.btn.is-loading {
+  pointer-events: none;
+  opacity: 0.85;
+}
+
 /* ------------------------------ Motion -------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }

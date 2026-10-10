@@ -91,11 +91,101 @@
     setInterval(function () { if (!document.hidden) poll(); }, 30000);
   }
 
-  /* Profile picture (DP) preview and canvas downscaling */
+  /* Professional Futuristic Loading HUD & Top Progress Indicator */
+  var topLoader = document.getElementById('top-loader');
+  var globalLoader = document.getElementById('fc-global-loader');
+  var globalLoaderMsg = document.getElementById('fc-loader-msg');
+
+  function startTopLoader() {
+    if (!topLoader) return;
+    topLoader.classList.remove('complete');
+    topLoader.classList.add('active');
+  }
+
+  function finishTopLoader() {
+    if (!topLoader) return;
+    topLoader.classList.add('complete');
+    setTimeout(function () {
+      topLoader.classList.remove('active', 'complete');
+    }, 400);
+  }
+
+  function showGlobalLoader(msg) {
+    if (globalLoaderMsg && msg) globalLoaderMsg.textContent = msg;
+    if (globalLoader) globalLoader.classList.add('is-active');
+    startTopLoader();
+  }
+
+  function hideGlobalLoader() {
+    if (globalLoader) globalLoader.classList.remove('is-active');
+    finishTopLoader();
+  }
+
+  window.FC_LOADER = {
+    start: startTopLoader,
+    finish: finishTopLoader,
+    showModal: showGlobalLoader,
+    hideModal: hideGlobalLoader
+  };
+
+  /* Animated page navigation feedback on internal links */
+  document.addEventListener('click', function (e) {
+    var link = e.target.closest('a');
+    if (!link || !link.href) return;
+    if (link.target === '_blank' || link.hasAttribute('download')) return;
+    var rawHref = link.getAttribute('href') || '';
+    if (rawHref.startsWith('#')) return;
+    try {
+      var url = new URL(link.href, window.location.href);
+      if (url.origin === window.location.origin && url.pathname !== window.location.pathname) {
+        startTopLoader();
+      }
+    } catch (_) {}
+  });
+
+  /* Form submit animated loading state */
+  document.addEventListener('submit', function (e) {
+    var form = e.target;
+    if (e.defaultPrevented) return;
+    if (form.hasAttribute('data-no-loader')) return;
+
+    var btn = form.querySelector('button[type="submit"], input[type="submit"]');
+    if (btn && !btn.classList.contains('is-loading')) {
+      btn.classList.add('is-loading');
+      if (btn.tagName === 'BUTTON') {
+        var sp = document.createElement('span');
+        sp.className = 'btn-spinner';
+        sp.setAttribute('aria-hidden', 'true');
+        btn.insertBefore(sp, btn.firstChild);
+      }
+    }
+    startTopLoader();
+
+    var action = form.getAttribute('action') || '';
+    if (action.indexOf('/account/avatar') !== -1) {
+      showGlobalLoader('SAVING PROFILE PICTURE');
+    } else if (action.indexOf('/admin') !== -1) {
+      showGlobalLoader('UPDATING CITIZEN ROSTER');
+    } else if (action.indexOf('/login') !== -1) {
+      showGlobalLoader('AUTHENTICATING CITIZEN');
+    } else if (action.indexOf('/register') !== -1) {
+      showGlobalLoader('INITIALIZING PASSPORT');
+    }
+  });
+
+  /* Profile picture (DP) preview and canvas downscaling with animated spinner */
   var dpFile = document.getElementById('dp-file');
   var dpData = document.getElementById('dp-data');
   var dpUrl = document.getElementById('dp-url');
   var dpStatus = document.getElementById('dp-status');
+  var avatarOverlay = document.getElementById('avatar-loading-overlay');
+
+  function showAvatarSpinner() {
+    if (avatarOverlay) avatarOverlay.style.display = 'flex';
+  }
+  function hideAvatarSpinner() {
+    if (avatarOverlay) avatarOverlay.style.display = 'none';
+  }
 
   function updateAvatarPreview(src) {
     var imgView = document.getElementById('avatar-img-view');
@@ -103,14 +193,19 @@
     if (imgView) {
       imgView.src = src;
     } else if (initView && initView.parentElement) {
+      var parent = initView.parentElement;
       var newImg = document.createElement('img');
       newImg.id = 'avatar-img-view';
       newImg.src = src;
       newImg.style.width = '100%';
       newImg.style.height = '100%';
       newImg.style.objectFit = 'cover';
-      initView.parentElement.innerHTML = '';
-      initView.parentElement.appendChild(newImg);
+      initView.remove();
+      if (avatarOverlay && avatarOverlay.parentElement === parent) {
+        parent.insertBefore(newImg, avatarOverlay);
+      } else {
+        parent.appendChild(newImg);
+      }
     }
   }
 
@@ -118,7 +213,9 @@
     dpFile.addEventListener('change', function (e) {
       var file = e.target.files && e.target.files[0];
       if (!file) return;
-      if (dpStatus) dpStatus.textContent = 'Processing image...';
+      showAvatarSpinner();
+      startTopLoader();
+      if (dpStatus) dpStatus.textContent = 'Processing & optimizing photo...';
       var reader = new FileReader();
       reader.onload = function (evt) {
         var img = new Image();
@@ -140,12 +237,20 @@
           dpData.value = dataUrl;
           if (dpUrl) dpUrl.value = '';
           updateAvatarPreview(dataUrl);
+          hideAvatarSpinner();
+          finishTopLoader();
           if (dpStatus) dpStatus.textContent = 'Photo ready to save! Click "Save Profile Picture" below.';
         };
         img.onerror = function () {
+          hideAvatarSpinner();
+          finishTopLoader();
           if (dpStatus) dpStatus.textContent = 'Could not load image file.';
         };
         img.src = evt.target.result;
+      };
+      reader.onerror = function () {
+        hideAvatarSpinner();
+        finishTopLoader();
       };
       reader.readAsDataURL(file);
     });
@@ -156,7 +261,16 @@
       var val = (dpUrl.value || '').trim();
       if (val && /^https?:\/\//i.test(val)) {
         if (dpData) dpData.value = '';
-        updateAvatarPreview(val);
+        showAvatarSpinner();
+        var testImg = new Image();
+        testImg.onload = function () {
+          updateAvatarPreview(val);
+          hideAvatarSpinner();
+        };
+        testImg.onerror = function () {
+          hideAvatarSpinner();
+        };
+        testImg.src = val;
       }
     });
   }

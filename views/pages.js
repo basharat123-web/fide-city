@@ -347,10 +347,13 @@ function account(ctx, { errors = {} } = {}) {
     <div class="card" style="margin-bottom: 2rem;">
       <h2 style="margin-top: 0;">Citizen Profile Picture (DP)</h2>
       <div style="display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1.25rem;">
-        <div style="width: 84px; height: 84px; border-radius: 50%; overflow: hidden; background: linear-gradient(135deg, var(--violet), var(--magenta)); display: grid; place-items: center; border: 3px solid ${meta.color}; box-shadow: 0 4px 16px rgba(0,0,0,0.4); flex-shrink: 0;">
+        <div style="position: relative; width: 84px; height: 84px; border-radius: 50%; overflow: hidden; background: linear-gradient(135deg, var(--violet), var(--magenta)); display: grid; place-items: center; border: 3px solid ${meta.color}; box-shadow: 0 4px 16px rgba(0,0,0,0.4); flex-shrink: 0;">
           ${u.avatar
             ? html`<img id="avatar-img-view" src="${u.avatar}" alt="${u.username}" style="width: 100%; height: 100%; object-fit: cover;">`
             : html`<span id="avatar-initial-view" style="font: 800 2.2rem/1 var(--font-display); color: #fff;">${u.username.slice(0, 1).toUpperCase()}</span>`}
+          <div id="avatar-loading-overlay" class="avatar-spinner-overlay" style="display: none;" aria-hidden="true">
+            <span class="spinner-ring-mini"></span>
+          </div>
         </div>
         <div style="flex: 1; min-width: 220px;">
           <p style="margin: 0 0 0.35rem 0; font-weight: 700; color: #fff;">Upload your photo or paste an image URL.</p>

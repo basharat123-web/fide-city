@@ -89,6 +89,19 @@ function page(ctx, { title, description, active = '', body, wide = false, robots
   <script src="/js/main.js" defer></script>
 </head>
 <body class="${active ? `page-${active}` : ''}">
+  <div id="top-loader" class="top-loader" aria-hidden="true"></div>
+  <div id="fc-global-loader" class="fc-loader-overlay" aria-hidden="true" role="status">
+    <div class="fc-loader-card">
+      <div class="fc-spinner-rings">
+        <span class="ring ring-outer"></span>
+        <span class="ring ring-middle"></span>
+        <span class="ring ring-inner"></span>
+        <span class="ring-core"></span>
+      </div>
+      <div class="fc-loader-text" id="fc-loader-msg">SYNCING FIDE CITY</div>
+      <div class="fc-loader-sub">TRANSMITTING SECURE DATA...</div>
+    </div>
+  </div>
   <a class="skip" href="#main">Skip to content</a>
   <header class="site-header">
     <div class="header-wrap bar">
