@@ -90,4 +90,74 @@
     poll();
     setInterval(function () { if (!document.hidden) poll(); }, 30000);
   }
+
+  /* Profile picture (DP) preview and canvas downscaling */
+  var dpFile = document.getElementById('dp-file');
+  var dpData = document.getElementById('dp-data');
+  var dpUrl = document.getElementById('dp-url');
+  var dpStatus = document.getElementById('dp-status');
+
+  function updateAvatarPreview(src) {
+    var imgView = document.getElementById('avatar-img-view');
+    var initView = document.getElementById('avatar-initial-view');
+    if (imgView) {
+      imgView.src = src;
+    } else if (initView && initView.parentElement) {
+      var newImg = document.createElement('img');
+      newImg.id = 'avatar-img-view';
+      newImg.src = src;
+      newImg.style.width = '100%';
+      newImg.style.height = '100%';
+      newImg.style.objectFit = 'cover';
+      initView.parentElement.innerHTML = '';
+      initView.parentElement.appendChild(newImg);
+    }
+  }
+
+  if (dpFile && dpData) {
+    dpFile.addEventListener('change', function (e) {
+      var file = e.target.files && e.target.files[0];
+      if (!file) return;
+      if (dpStatus) dpStatus.textContent = 'Processing image...';
+      var reader = new FileReader();
+      reader.onload = function (evt) {
+        var img = new Image();
+        img.onload = function () {
+          var canvas = document.createElement('canvas');
+          var max = 160;
+          var w = img.width;
+          var h = img.height;
+          if (w > h) {
+            if (w > max) { h = Math.round((h * max) / w); w = max; }
+          } else {
+            if (h > max) { w = Math.round((w * max) / h); h = max; }
+          }
+          canvas.width = w;
+          canvas.height = h;
+          var ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          var dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+          dpData.value = dataUrl;
+          if (dpUrl) dpUrl.value = '';
+          updateAvatarPreview(dataUrl);
+          if (dpStatus) dpStatus.textContent = 'Photo ready to save! Click "Save Profile Picture" below.';
+        };
+        img.onerror = function () {
+          if (dpStatus) dpStatus.textContent = 'Could not load image file.';
+        };
+        img.src = evt.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  if (dpUrl) {
+    dpUrl.addEventListener('input', function () {
+      var val = (dpUrl.value || '').trim();
+      if (val && /^https?:\/\//i.test(val)) {
+        if (dpData) dpData.value = '';
+        updateAvatarPreview(val);
+      }
+    });
+  }
 })();

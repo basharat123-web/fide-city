@@ -367,6 +367,8 @@ function account(ctx, { errors = {} } = {}) {
 
         <input type="hidden" name="avatar" id="dp-data" value="${u.avatar && u.avatar.startsWith('data:') ? u.avatar : ''}">
 
+        <p id="dp-status" class="muted" style="margin: 0.5rem 0 0 0; font-size: 0.85rem; color: #4ade80;"></p>
+
         <div style="display: flex; gap: 0.75rem; margin-top: 1rem; align-items: center; flex-wrap: wrap;">
           <button class="btn btn-primary" type="submit">Save Profile Picture</button>
           ${u.avatar
@@ -374,51 +376,6 @@ function account(ctx, { errors = {} } = {}) {
             : ''}
         </div>
       </form>
-      <script>
-        (function() {
-          var fileInput = document.getElementById('dp-file');
-          var dataInput = document.getElementById('dp-data');
-          var imgView = document.getElementById('avatar-img-view');
-          var initView = document.getElementById('avatar-initial-view');
-          if (!fileInput) return;
-          fileInput.addEventListener('change', function(e) {
-            var file = e.target.files && e.target.files[0];
-            if (!file) return;
-            var reader = new FileReader();
-            reader.onload = function(evt) {
-              var img = new Image();
-              img.onload = function() {
-                var canvas = document.createElement('canvas');
-                var max = 160;
-                var w = img.width;
-                var h = img.height;
-                if (w > h) { if (w > max) { h = Math.round(h * max / w); w = max; } }
-                else { if (h > max) { w = Math.round(w * max / h); h = max; } }
-                canvas.width = w;
-                canvas.height = h;
-                var c = canvas.getContext('2d');
-                c.drawImage(img, 0, 0, w, h);
-                var dataUrl = canvas.toDataURL('image/jpeg', 0.82);
-                dataInput.value = dataUrl;
-                if (imgView) {
-                  imgView.src = dataUrl;
-                } else if (initView && initView.parentElement) {
-                  var newImg = document.createElement('img');
-                  newImg.id = 'avatar-img-view';
-                  newImg.src = dataUrl;
-                  newImg.style.width = '100%';
-                  newImg.style.height = '100%';
-                  newImg.style.objectFit = 'cover';
-                  initView.parentElement.innerHTML = '';
-                  initView.parentElement.appendChild(newImg);
-                }
-              };
-              img.src = evt.target.result;
-            };
-            reader.readAsDataURL(file);
-          });
-        })();
-      </script>
     </div>
 
     <form class="form card" method="post" action="/account/password" autocomplete="off">

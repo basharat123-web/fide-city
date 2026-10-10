@@ -346,7 +346,10 @@ post('/account/avatar', requireUser, async (ctx) => {
 
   if (!isRemove) {
     const rawData = typeof ctx.body.avatar === 'string' ? ctx.body.avatar.trim() : '';
-    const rawUrl = typeof ctx.body.avatar_url === 'string' ? ctx.body.avatar_url.trim() : '';
+    let rawUrl = typeof ctx.body.avatar_url === 'string' ? ctx.body.avatar_url.trim() : '';
+    if (rawUrl && !/^https?:\/\//i.test(rawUrl) && rawUrl.includes('.')) {
+      rawUrl = 'https://' + rawUrl;
+    }
 
     if (rawData && rawData.startsWith('data:image/')) {
       if (rawData.length > 250000) {
@@ -367,6 +370,7 @@ post('/account/avatar', requireUser, async (ctx) => {
   }
 
   db.prepare('UPDATE users SET avatar = ? WHERE id = ?').run(avatar || null, ctx.user.id);
+  ctx.user.avatar = avatar || null;
 
   if (config.supabase && config.supabase.enabled) {
     const { updateUserAvatar } = require('../lib/supabase');
