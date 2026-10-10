@@ -3,6 +3,7 @@ const { get, post } = require('../lib/http');
 const { db, audit } = require('../lib/db');
 const sessions = require('../lib/session');
 const sec = require('../lib/security');
+const config = require('../lib/config');
 const view = require('../views/admin');
 const { httpError, requireUser, requireStaff, requireAdmin, intParam } = require('./helpers');
 
@@ -29,11 +30,17 @@ const q = {
 
 const scalar = (sql, ...args) => db.prepare(sql).get(...args).n;
 
-get('/admin', requireUser, requireStaff, (ctx) => {
+get('/admin', requireUser, requireStaff, async (ctx) => {
   const isAdmin = ['admin', 'root_admin'].includes(ctx.user.role);
   let tab = ctx.query.get('tab') || 'overview';
   if (!['overview', 'users', 'stories', 'audit'].includes(tab)) tab = 'overview';
   if (!isAdmin && (tab === 'stories' || tab === 'audit')) tab = 'overview';
+
+  if (config.supabase && config.supabase.enabled) {
+    const { syncFromSupabase, syncLocalToSupabase } = require('../lib/supabase');
+    await syncFromSupabase();
+    await syncLocalToSupabase();
+  }
 
   let data = {};
   if (tab === 'overview') {
@@ -80,6 +87,8 @@ post('/admin/users/:id/ban', requireUser, requireStaff, (ctx) => {
   const reason = sec.cleanLine(ctx.body.reason, 200) || 'No reason given';
   q.ban.run(reason, u.id);
   sessions.destroyAllForUser(u.id);
+  const { updateUserBan } = require('../lib/supabase');
+  updateUserBan(u.username, 1, reason);
   audit(ctx.user.id, 'user_ban', `${u.username}: ${reason}`, ctx.ip);
   ctx.flash('ok', `${u.username} was banned.`);
   ctx.redirect('/admin?tab=users');
@@ -92,6 +101,8 @@ post('/admin/users/:id/unban', requireUser, requireStaff, (ctx) => {
     throw httpError(403, 'Only Root Admin can unban this account.');
   }
   q.unban.run(u.id);
+  const { updateUserBan } = require('../lib/supabase');
+  updateUserBan(u.username, 0, null);
   audit(ctx.user.id, 'user_unban', u.username, ctx.ip);
   ctx.flash('ok', `${u.username} was unbanned.`);
   ctx.redirect('/admin?tab=users');
@@ -112,6 +123,10 @@ post('/admin/users/:id/role', requireUser, requireAdmin, (ctx) => {
   const title = sec.cleanLine(ctx.body.title, 40) || null;
   q.role.run(role, role === 'member' ? null : title, u.id);
   sessions.destroyAllForUser(u.id); // force re-login so the new role takes effect cleanly
+
+  const { updateUserRole } = require('../lib/supabase');
+  updateUserRole(u.username, role, role === 'member' ? null : title);
+
   audit(ctx.user.id, 'user_role', `${u.username}: ${u.role} -> ${role}`, ctx.ip);
   ctx.flash('ok', `${u.username} is now ${role}.`);
   ctx.redirect('/admin?tab=users');

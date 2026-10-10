@@ -61,7 +61,12 @@ post('/login', async (ctx) => {
     return ctx.html(authViews.login(ctx, { error: 'Could not verify you are human. Try again.', username: ident }), 400);
   }
 
-  const user = ident ? q.byName.get(ident, ident) : null;
+  let user = ident ? q.byName.get(ident, ident) : null;
+  if (!user && config.supabase && config.supabase.enabled) {
+    const { syncFromSupabase } = require('../lib/supabase');
+    await syncFromSupabase();
+    user = ident ? q.byName.get(ident, ident) : null;
+  }
   const now = Date.now();
   const locked = user && user.locked_until > now;
 
@@ -161,12 +166,18 @@ post('/register', async (ctx) => {
 
   const hash = await sec.hashPassword(password);
   let id;
+  const now = Date.now();
   try {
-    id = Number(q.insert.run(username, email, hash, Date.now(), Date.now()).lastInsertRowid);
+    id = Number(q.insert.run(username, email, hash, now, now).lastInsertRowid);
   } catch (_) {
     // Unique constraint race: someone registered the same name between our check and insert.
     return ctx.html(authViews.register(ctx, { errors: { form: 'That username or email is already in use.' }, values }), 409);
   }
+
+  // Sync to Supabase
+  const { saveUser } = require('../lib/supabase');
+  saveUser({ id, username, email, password_hash: hash, role: 'member', created_at: now, last_login: now });
+
   startSession(ctx, id);
   audit(id, 'register', '', ctx.ip);
   ctx.flash('ok', 'Account created. Welcome to Fide City.');

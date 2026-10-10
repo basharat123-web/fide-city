@@ -52,6 +52,17 @@ get('/api/status', async (ctx) => {
 
 get('/healthz', (ctx) => ctx.json({ ok: true }));
 
+get('/api/sync', async (ctx) => {
+  if (!config.supabase || !config.supabase.enabled) {
+    return ctx.json({ ok: false, error: 'Supabase credentials missing or not configured' }, 400);
+  }
+  const { syncFromSupabase, syncLocalToSupabase } = require('../lib/supabase');
+  await syncLocalToSupabase();
+  await syncFromSupabase();
+  const count = db.prepare('SELECT COUNT(*) AS n FROM users').get().n;
+  ctx.json({ ok: true, message: 'Synced with Supabase successfully!', totalUsers: count });
+});
+
 get('/favicon.ico', (ctx) => ctx.redirect('/img/favicon.png', 301));
 
 get('/robots.txt', (ctx) => {

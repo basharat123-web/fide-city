@@ -19,6 +19,12 @@ try {
   require('./routes/auth');
   require('./routes/forum');
   require('./routes/admin');
+
+  // Initial Supabase sync in background
+  if (config.supabase && config.supabase.enabled) {
+    const { syncFromSupabase, syncLocalToSupabase } = require('./lib/supabase');
+    syncFromSupabase().then(() => syncLocalToSupabase()).catch((e) => console.error('[supabase boot sync]', e.message));
+  }
 } catch (err) {
   initError = err;
   console.error('[Startup Error]:', err);
