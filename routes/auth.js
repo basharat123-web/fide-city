@@ -175,7 +175,7 @@ post('/register', async (ctx) => {
 
   // Sync to Supabase
   const { saveUser } = require('../lib/supabase');
-  saveUser({ id, username, email, password_hash: hash, role: 'member', created_at: now, last_login: now });
+  saveUser({ id, username, email, password_hash: hash, role: 'member', staff_title: 'EN | Player', created_at: now, last_login: now });
 
   startSession(ctx, id);
   audit(id, 'register', '', ctx.ip);

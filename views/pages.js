@@ -5,6 +5,7 @@ const { html, raw } = require('../lib/html');
 const config = require('../lib/config');
 const content = require('../data/content');
 const { page, csrfField, fmtDate, fmtDateTime, icons } = require('./layout');
+const { getRoleMeta } = require('../lib/roles');
 
 const GALLERY_DIR = path.join(__dirname, '..', 'public', 'img', 'gallery');
 
@@ -327,15 +328,19 @@ function newsStory(ctx, { story, author }) {
 /* ------------------------------ Account ------------------------------- */
 function account(ctx, { errors = {} } = {}) {
   const u = ctx.user;
+  const meta = getRoleMeta(u);
   const body = html`<div class="wrap prose-wrap">
     <h1 class="page-title">Your account</h1>
     <dl class="facts">
       <div><dt>Username</dt><dd>${u.username}</dd></div>
       <div><dt>Email</dt><dd>${u.email}</dd></div>
-      <div><dt>Role</dt><dd>${u.role === 'root_admin' ? html`<span class="badge badge-root" style="font-size: 0.85rem; padding: 0.25rem 0.75rem;">👑 Root Admin (Owner)</span>` : u.role === 'admin' ? html`<span class="badge badge-admin">Admin</span>` : u.role === 'mod' ? html`<span class="badge badge-mod">Moderator</span>` : 'Member'}</dd></div>
-      ${u.staff_title ? html`<div><dt>Staff title</dt><dd><strong>${u.staff_title}</strong></dd></div>` : ''}
+      <div><dt>City Role</dt><dd><span class="badge" style="background: ${meta.color}25; border: 1.5px solid ${meta.color}88; color: ${meta.color}; font-weight: 800; font-size: 0.88rem; padding: 0.3rem 0.85rem;">${meta.icon} ${meta.name}</span></dd></div>
       <div><dt>Joined</dt><dd>${fmtDate(u.created_at)}</dd></div>
-      ${['root_admin', 'admin', 'mod'].includes(u.role) ? html`<div style="grid-column: 1 / -1; margin-top: 0.6rem;"><a class="btn btn-primary" href="/admin" style="background: linear-gradient(135deg, #f8c040, #fd20d7); font-weight: 800;">👑 Open Staff & Account Dashboard</a></div>` : ''}
+      ${u.role === 'root_admin'
+        ? html`<div style="grid-column: 1 / -1; margin-top: 0.6rem;"><a class="btn btn-primary" href="/admin/root" style="background: linear-gradient(135deg, #f8c040, #fd20d7); font-weight: 800; color: #14011c;">👑 Open Root Admin Master Console</a></div>`
+        : ['admin', 'mod'].includes(u.role)
+          ? html`<div style="grid-column: 1 / -1; margin-top: 0.6rem;"><a class="btn btn-primary" href="/admin" style="font-weight: 700;">🛡️ Open Staff Panel</a></div>`
+          : ''}
     </dl>
 
     <form class="form card" method="post" action="/account/password" autocomplete="off">

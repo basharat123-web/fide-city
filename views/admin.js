@@ -129,21 +129,29 @@ function dashboard(ctx, { tab, data }) {
   return page(ctx, { title: 'Staff dashboard', body, robots: 'noindex, nofollow' });
 }
 
+const { CITY_ROLES, getRoleMeta } = require('../lib/roles');
+
+function cityRoleBadge(u) {
+  const meta = getRoleMeta(u);
+  return html`<span class="badge" style="background: ${meta.color}25; border: 1.5px solid ${meta.color}88; color: ${meta.color}; font-weight: 800; font-size: 0.76rem; letter-spacing: 0.03em;">${meta.icon} ${meta.name}</span>`;
+}
+
 function rootConsole(ctx, { list, q = '', filterRole = 'all', stats = {} }) {
   const filterBtns = [
-    ['all', 'All Citizens'],
-    ['root_admin', `👑 Root Admins (${stats.roots || 0})`],
+    ['all', `All (${stats.users || 0})`],
+    ['root_admin', `👑 Executive (${stats.roots || 0})`],
     ['admin', `🛡️ Admins (${stats.admins || 0})`],
-    ['mod', `⚔️ Moderators (${stats.mods || 0})`],
-    ['member', `👤 Citizens (${stats.members || 0})`],
-    ['banned', `🚫 Blocked Accounts (${stats.banned || 0})`],
+    ['mod', `⚔️ Staff (${stats.mods || 0})`],
+    ['leadership', `🏛️ City Leaders`],
+    ['member', `🎮 EN | Players (${stats.members || 0})`],
+    ['banned', `🚫 Blocked (${stats.banned || 0})`],
   ];
 
   const body = html`<div class="wrap">
     <div class="root-header-banner">
       <div class="root-header-info">
         <h1><span>👑</span> Root Administrator Console</h1>
-        <p>Master Control Center • Manage citizen accounts, staff hierarchy, roles & security blocks.</p>
+        <p>Master Control Center • Manage citizen accounts, Discord city roles & security blocks.</p>
       </div>
       <div>
         <a class="btn btn-ghost btn-sm" href="/api/sync" target="_blank" style="border-color: rgba(248, 192, 64, 0.4); color: #ffd700;">🔄 Sync Cloud (Supabase)</a>
@@ -196,8 +204,7 @@ function rootConsole(ctx, { list, q = '', filterRole = 'all', stats = {} }) {
                 </h3>
                 <div class="email-sub">${u.email}</div>
                 <div class="meta-tags">
-                  ${roleBadge(u.role)}
-                  ${u.staff_title ? html`<span class="badge badge-quiet">${u.staff_title}</span>` : ''}
+                  ${cityRoleBadge(u)}
                   <span class="muted" style="font-size: 0.82rem;">Joined: ${fmtDate(u.created_at)}</span>
                   <span class="muted" style="font-size: 0.82rem;">Last active: ${u.last_login ? fmtDateTime(u.last_login) : 'Never'}</span>
                 </div>
@@ -206,19 +213,25 @@ function rootConsole(ctx, { list, q = '', filterRole = 'all', stats = {} }) {
             </div>
 
             <div class="user-card-actions">
-              <!-- Role Changer Form -->
+              <!-- City Role Selector Form -->
               <form method="post" action="/admin/users/${u.id}/role" class="role-update-form">
                 ${csrfField(ctx)}
-                <label class="sr" for="role-sel-${u.id}">Role</label>
-                <select id="role-sel-${u.id}" name="role" style="font-weight: 700;">
-                  <option value="member"${u.role === 'member' ? html` selected` : ''}>👤 Member (Citizen)</option>
-                  <option value="mod"${u.role === 'mod' ? html` selected` : ''}>⚔️ Moderator</option>
-                  <option value="admin"${u.role === 'admin' ? html` selected` : ''}>🛡️ Admin</option>
-                  <option value="root_admin"${u.role === 'root_admin' ? html` selected` : ''}>👑 Root Admin (Owner)</option>
+                <label class="sr" for="role-sel-${u.id}">City Role</label>
+                <select id="role-sel-${u.id}" name="title" style="font-weight: 700; max-width: 240px;">
+                  <optgroup label="👑 Executive Management">
+                    ${CITY_ROLES.filter((r) => r.category === 'Executive').map((r) => html`<option value="${r.name}"${(u.staff_title || (u.role === 'root_admin' ? 'Project Management' : '')) === r.name ? html` selected` : ''}>${r.icon} ${r.name}</option>`)}
+                  </optgroup>
+                  <optgroup label="⚔️ Staff & Administration">
+                    ${CITY_ROLES.filter((r) => r.category === 'Staff').map((r) => html`<option value="${r.name}"${u.staff_title === r.name ? html` selected` : ''}>${r.icon} ${r.name}</option>`)}
+                  </optgroup>
+                  <optgroup label="🏛️ City & Faction Leadership">
+                    ${CITY_ROLES.filter((r) => r.category === 'City Leadership').map((r) => html`<option value="${r.name}"${u.staff_title === r.name ? html` selected` : ''}>${r.icon} ${r.name}</option>`)}
+                  </optgroup>
+                  <optgroup label="🎮 Community & Players">
+                    ${CITY_ROLES.filter((r) => r.category === 'Community').map((r) => html`<option value="${r.name}"${(u.staff_title || 'EN | Player') === r.name ? html` selected` : ''}>${r.icon} ${r.name}</option>`)}
+                  </optgroup>
                 </select>
-                <label class="sr" for="title-inp-${u.id}">Title</label>
-                <input id="title-inp-${u.id}" name="title" value="${u.staff_title || ''}" placeholder="Staff Title (e.g. Founder)" maxlength="40">
-                <button class="btn btn-ghost btn-sm" type="submit">Update Role</button>
+                <button class="btn btn-ghost btn-sm" type="submit">Save Role</button>
               </form>
 
               <!-- Ban / Unban Form -->
@@ -228,7 +241,7 @@ function rootConsole(ctx, { list, q = '', filterRole = 'all', stats = {} }) {
                   ? html`<form method="post" action="/admin/users/${u.id}/unban" class="ban-action-form">
                       ${csrfField(ctx)}
                       <button class="btn btn-ghost btn-sm" type="submit" style="color: #4ade80; border-color: rgba(74, 222, 128, 0.4);">
-                        ✅ Unblock / Restore Account
+                        ✅ Unblock Account
                       </button>
                     </form>`
                   : html`<form method="post" action="/admin/users/${u.id}/ban" class="ban-action-form">
@@ -236,7 +249,7 @@ function rootConsole(ctx, { list, q = '', filterRole = 'all', stats = {} }) {
                       <label class="sr" for="ban-rsn-${u.id}">Block reason</label>
                       <input id="ban-rsn-${u.id}" name="reason" placeholder="Reason for block..." maxlength="200" required>
                       <button class="btn btn-danger btn-sm" type="submit">
-                        🚫 Block Account
+                        🚫 Block
                       </button>
                     </form>`}
             </div>

@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
   email         TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   role          TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('member', 'mod', 'admin', 'root_admin')),
-  staff_title   TEXT,
+  staff_title   TEXT DEFAULT 'EN | Player',
   created_at    BIGINT NOT NULL,
   last_login    BIGINT,
   failed_logins INT NOT NULL DEFAULT 0,
@@ -20,6 +20,10 @@ CREATE TABLE IF NOT EXISTS users (
   banned        INT NOT NULL DEFAULT 0,
   ban_reason    TEXT
 );
+
+-- Note: Run on existing DB:
+-- ALTER TABLE users ALTER COLUMN staff_title SET DEFAULT 'EN | Player';
+-- UPDATE users SET staff_title = 'EN | Player' WHERE staff_title IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_users_username_lower ON users (LOWER(username));
 CREATE INDEX IF NOT EXISTS idx_users_email_lower ON users (LOWER(email));

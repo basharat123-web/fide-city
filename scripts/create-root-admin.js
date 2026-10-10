@@ -39,7 +39,7 @@ function askHidden(prompt) {
 
   const existing = db.prepare('SELECT id, role FROM users WHERE username = ? OR email = ?').get(username, email);
   if (existing) {
-    db.prepare("UPDATE users SET role = 'root_admin', staff_title = COALESCE(staff_title, 'Server Founder & Root Admin'), banned = 0 WHERE id = ?").run(existing.id);
+    db.prepare("UPDATE users SET role = 'root_admin', staff_title = COALESCE(staff_title, 'Project Management'), banned = 0 WHERE id = ?").run(existing.id);
     audit(existing.id, 'cli_promote_root_admin', username, 'cli');
     console.log(`\n👑 SUCCESS: Account "${username}" is now a ROOT ADMIN with full privileges.`);
     return;
@@ -54,7 +54,7 @@ function askHidden(prompt) {
   const hash = await sec.hashPassword(password);
   const id = Number(
     db
-      .prepare("INSERT INTO users (username, email, password_hash, role, staff_title, created_at) VALUES (?, ?, ?, 'root_admin', 'Server Founder & Root Admin', ?)")
+      .prepare("INSERT INTO users (username, email, password_hash, role, staff_title, created_at) VALUES (?, ?, ?, 'root_admin', 'Project Management', ?)")
       .run(username, email, hash, Date.now()).lastInsertRowid
   );
   audit(id, 'cli_create_root_admin', username, 'cli');

@@ -1,6 +1,7 @@
 'use strict';
 const { html, raw } = require('../lib/html');
 const config = require('../lib/config');
+const { getRoleMeta } = require('../lib/roles');
 
 const NAV = [
   { key: 'home', href: '/', label: 'Home' },
@@ -103,25 +104,28 @@ function page(ctx, { title, description, active = '', body, wide = false, robots
       <div class="bar-end">
         <div class="pill" data-status-pill aria-live="polite"><span class="dot" aria-hidden="true"></span><span data-status-text>Checking city</span></div>
         ${user
-          ? html`<div class="account-capsule">
-              <a class="account-pill" href="/account" title="Account Settings">
-                <span class="avatar-badge">${user.role === 'root_admin' ? '👑' : user.role === 'admin' ? '🛡️' : user.role === 'mod' ? '⚔️' : '👤'}</span>
-                <span class="user-handle">${user.username}</span>
-                <span class="role-chip role-chip-${user.role}">${user.role === 'root_admin' ? 'Root' : user.role === 'admin' ? 'Admin' : user.role === 'mod' ? 'Mod' : 'Member'}</span>
-              </a>
-              ${user.role === 'root_admin'
-                ? html`<a class="btn-console btn-console-root" href="/admin/root" title="Root Administrator Master Console"><span>👑</span> Master Console</a>`
-                : user.role !== 'member'
-                  ? html`<a class="btn-console" href="/admin">Staff Panel</a>`
-                  : ''}
-              <form method="post" action="/logout" class="signout-form">
-                ${csrfField(ctx)}
-                <button class="btn-signout" type="submit" title="Sign out">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-                  <span>Sign out</span>
-                </button>
-              </form>
-            </div>`
+          ? (() => {
+              const uMeta = getRoleMeta(user);
+              return html`<div class="account-capsule">
+                <a class="account-pill" href="/account" title="Account Settings: ${uMeta.name}">
+                  <span class="avatar-badge" style="border: 1.5px solid ${uMeta.color};">${uMeta.icon}</span>
+                  <span class="user-handle">${user.username}</span>
+                  <span class="role-chip" style="background: ${uMeta.color}28; color: ${uMeta.color}; border: 1px solid ${uMeta.color}77;">${uMeta.name}</span>
+                </a>
+                ${user.role === 'root_admin'
+                  ? html`<a class="btn-console btn-console-root" href="/admin/root" title="Root Administrator Master Console"><span>👑</span> Master Console</a>`
+                  : user.role !== 'member'
+                    ? html`<a class="btn-console" href="/admin">Staff Panel</a>`
+                    : ''}
+                <form method="post" action="/logout" class="signout-form">
+                  ${csrfField(ctx)}
+                  <button class="btn-signout" type="submit" title="Sign out">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                    <span>Sign out</span>
+                  </button>
+                </form>
+              </div>`;
+            })()
           : html`<div class="account">
               <a class="btn btn-quiet" href="/login">Sign in</a>
               <a class="btn btn-primary" href="/register">Join now</a>

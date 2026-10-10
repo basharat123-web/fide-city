@@ -55,6 +55,8 @@ get('/admin/root', requireUser, requireRootAdmin, async (ctx) => {
 
   if (filterRole === 'banned') {
     sql += ' AND banned = 1';
+  } else if (filterRole === 'leadership') {
+    sql += " AND staff_title IN ('Governor', 'Election Commissioner', 'Faction Leader', 'State Leader', 'Crime Leader', 'State Deputy', 'Crime Deputy', 'Weazel News')";
   } else if (['root_admin', 'admin', 'mod', 'member'].includes(filterRole)) {
     sql += ' AND role = ?';
     params.push(filterRole);
@@ -163,7 +165,15 @@ post('/admin/users/:id/unban', requireUser, requireStaff, async (ctx) => {
 post('/admin/users/:id/role', requireUser, requireAdmin, async (ctx) => {
   const u = await targetUser(ctx);
   const isRoot = ctx.user.role === 'root_admin';
-  const role = sec.str(ctx.body.role, 15);
+  let role = sec.str(ctx.body.role, 15);
+  let title = sec.cleanLine(ctx.body.title, 50);
+
+  const { findRoleByName, DEFAULT_ROLE_NAME } = require('../lib/roles');
+  const cityRole = findRoleByName(title);
+  if (cityRole && isRoot && !role) {
+    role = cityRole.systemRole;
+  }
+  if (!role) role = cityRole ? cityRole.systemRole : 'member';
 
   const allowedRoles = isRoot ? ['member', 'mod', 'admin', 'root_admin'] : ['member', 'mod'];
   if (!allowedRoles.includes(role)) throw httpError(400, 'Invalid role or insufficient permissions.');
@@ -172,15 +182,18 @@ post('/admin/users/:id/role', requireUser, requireAdmin, async (ctx) => {
     throw httpError(403, 'Only Root Admin can change staff/admin roles.');
   }
 
-  const title = sec.cleanLine(ctx.body.title, 40) || null;
-  q.role.run(role, role === 'member' ? null : title, u.id);
+  if (!title) {
+    title = role === 'root_admin' ? 'Project Management' : role === 'admin' ? 'Server Administrator' : role === 'mod' ? 'Junior Administrator' : DEFAULT_ROLE_NAME;
+  }
+
+  q.role.run(role, title, u.id);
   sessions.destroyAllForUser(u.id); // force re-login so the new role takes effect cleanly
 
   const { updateUserRole } = require('../lib/supabase');
-  await updateUserRole(u.username, role, role === 'member' ? null : title);
+  await updateUserRole(u.username, role, title);
 
-  audit(ctx.user.id, 'user_role', `${u.username}: ${u.role} -> ${role}`, ctx.ip);
-  ctx.flash('ok', `${u.username} is now ${role}.`);
+  audit(ctx.user.id, 'user_role', `${u.username}: ${u.role} (${u.staff_title || ''}) -> ${role} (${title})`, ctx.ip);
+  ctx.flash('ok', `${u.username} role updated to: ${title}.`);
   ctx.redirect(redirectBack(ctx));
 });
 

@@ -1,15 +1,14 @@
 'use strict';
 const { html } = require('../lib/html');
 const { page, csrfField, fmtDateTime, timeAgo } = require('./layout');
+const { getRoleMeta } = require('../lib/roles');
 
-const isStaff = (u) => u && (u.role === 'mod' || u.role === 'admin');
+const isStaff = (u) => u && ['mod', 'admin', 'root_admin'].includes(u.role);
 
-const roleBadge = (role) =>
-  role === 'admin'
-    ? html`<span class="badge badge-admin">Admin</span>`
-    : role === 'mod'
-      ? html`<span class="badge badge-mod">Mod</span>`
-      : '';
+const roleBadge = (u) => {
+  const meta = getRoleMeta(u);
+  return html`<span class="badge" style="background: ${meta.color}25; border: 1px solid ${meta.color}77; color: ${meta.color}; font-weight: 700; font-size: 0.72rem; letter-spacing: 0.03em;">${meta.icon} ${meta.name}</span>`;
+};
 
 function crumbs(items) {
   return html`<nav class="crumbs" aria-label="Breadcrumb"><ol>${items.map((i, idx) =>
@@ -125,8 +124,7 @@ function thread(ctx, { t, cat, posts, pageNo, pages, canReply, errors = {}, draf
           <aside class="post-author">
             <span class="avatar" aria-hidden="true">${p.username.slice(0, 1).toUpperCase()}</span>
             <strong>${p.username}</strong>
-            ${roleBadge(p.role)}
-            <span class="muted">${p.staff_title || ''}</span>
+            ${roleBadge(p)}
           </aside>
           <div class="post-main">
             <header class="post-meta"><time datetime="${new Date(p.created_at).toISOString()}">${fmtDateTime(p.created_at)}</time>${p.id === t.first_post_id ? '' : html` <a href="#post-${p.id}" class="permalink" aria-label="Link to this reply">#${(pageNo - 1) * 20 + i + 1}</a>`}</header>
