@@ -31,9 +31,19 @@ server.on('clientError', (err, socket) => {
   if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
 });
 
-server.listen(config.port, () => {
-  console.log(`${config.server.name} listening on ${config.siteUrl} (port ${config.port}, ${config.isProd ? 'production' : 'development'})`);
-});
+if (process.env.VERCEL) {
+  module.exports = (req, res) => {
+    return app.handle(req, res).catch((err) => {
+      console.error('[fatal handler error]', err);
+      if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'text/plain' });
+      res.end('500 Internal Server Error');
+    });
+  };
+} else {
+  server.listen(config.port, () => {
+    console.log(`${config.server.name} listening on ${config.siteUrl} (port ${config.port}, ${config.isProd ? 'production' : 'development'})`);
+  });
+}
 
 function shutdown(signal) {
   console.log(`${signal} received, shutting down`);
