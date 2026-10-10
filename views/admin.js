@@ -115,7 +115,7 @@ function audit(ctx, { rows }) {
 }
 
 function dashboard(ctx, { tab, data }) {
-  const isAdmin = ctx.user.role === 'admin';
+  const isAdmin = ['admin', 'root_admin'].includes(ctx.user.role);
   let inner;
   if (tab === 'users') inner = users(ctx, data);
   else if (tab === 'stories') inner = stories(ctx, data);
@@ -129,4 +129,124 @@ function dashboard(ctx, { tab, data }) {
   return page(ctx, { title: 'Staff dashboard', body, robots: 'noindex, nofollow' });
 }
 
-module.exports = { dashboard };
+function rootConsole(ctx, { list, q = '', filterRole = 'all', stats = {} }) {
+  const filterBtns = [
+    ['all', 'All Citizens'],
+    ['root_admin', `👑 Root Admins (${stats.roots || 0})`],
+    ['admin', `🛡️ Admins (${stats.admins || 0})`],
+    ['mod', `⚔️ Moderators (${stats.mods || 0})`],
+    ['member', `👤 Citizens (${stats.members || 0})`],
+    ['banned', `🚫 Blocked Accounts (${stats.banned || 0})`],
+  ];
+
+  const body = html`<div class="wrap">
+    <div class="root-header-banner">
+      <div class="root-header-info">
+        <h1><span>👑</span> Root Administrator Console</h1>
+        <p>Master Control Center • Manage citizen accounts, staff hierarchy, roles & security blocks.</p>
+      </div>
+      <div>
+        <a class="btn btn-ghost btn-sm" href="/api/sync" target="_blank" style="border-color: rgba(248, 192, 64, 0.4); color: #ffd700;">🔄 Sync Cloud (Supabase)</a>
+      </div>
+    </div>
+
+    <div class="root-metrics-grid">
+      <div class="root-metric-card gold">
+        <div class="label">Total Accounts</div>
+        <div class="val">${stats.users || 0}</div>
+      </div>
+      <div class="root-metric-card magenta">
+        <div class="label">Root Administrators</div>
+        <div class="val">${stats.roots || 0}</div>
+      </div>
+      <div class="root-metric-card purple">
+        <div class="label">Staff (Admins & Mods)</div>
+        <div class="val">${(stats.admins || 0) + (stats.mods || 0)}</div>
+      </div>
+      <div class="root-metric-card danger">
+        <div class="label">Blocked / Banned</div>
+        <div class="val">${stats.banned || 0}</div>
+      </div>
+    </div>
+
+    <div class="root-controls-bar">
+      <div class="role-filter-group">
+        ${filterBtns.map(([key, label]) => html`<a class="role-filter-btn${filterRole === key ? ' active' : ''}" href="/admin/root?role=${key}${q ? `&q=${encodeURIComponent(q)}` : ''}">${label}</a>`)}
+      </div>
+
+      <form class="inline-search" method="get" action="/admin/root" role="search" style="margin: 0;">
+        <input type="hidden" name="role" value="${filterRole}">
+        <label for="q-root" class="sr">Search accounts</label>
+        <input id="q-root" name="q" type="search" value="${q}" placeholder="Search username or email..." maxlength="40" style="padding: 0.45rem 0.8rem; border-radius: 999px;">
+        <button class="btn btn-ghost btn-sm" type="submit">Search</button>
+      </form>
+    </div>
+
+    <div class="root-users-list">
+      ${list.length === 0
+        ? html`<div class="card center" style="padding: 3rem;"><p class="muted" style="margin:0; font-size: 1.1rem;">No accounts found matching your query.</p></div>`
+        : list.map((u) => html`
+          <div class="root-user-card ${u.role === 'root_admin' ? 'is-root' : ''} ${u.banned ? 'is-banned' : ''}">
+            <div class="user-card-bio">
+              <div class="user-avatar-circle">${u.role === 'root_admin' ? '👑' : u.username.slice(0, 1).toUpperCase()}</div>
+              <div class="user-details">
+                <h3>
+                  <span>${u.username}</span>
+                  ${u.id === ctx.user.id ? html`<span class="badge badge-gold" style="font-size: 0.72rem;">YOU</span>` : ''}
+                </h3>
+                <div class="email-sub">${u.email}</div>
+                <div class="meta-tags">
+                  ${roleBadge(u.role)}
+                  ${u.staff_title ? html`<span class="badge badge-quiet">${u.staff_title}</span>` : ''}
+                  <span class="muted" style="font-size: 0.82rem;">Joined: ${fmtDate(u.created_at)}</span>
+                  <span class="muted" style="font-size: 0.82rem;">Last active: ${u.last_login ? fmtDateTime(u.last_login) : 'Never'}</span>
+                </div>
+                ${u.banned ? html`<div class="ban-alert-box"><strong>🚫 BLOCKED:</strong> ${u.ban_reason || 'No reason specified'}</div>` : ''}
+              </div>
+            </div>
+
+            <div class="user-card-actions">
+              <!-- Role Changer Form -->
+              <form method="post" action="/admin/users/${u.id}/role" class="role-update-form">
+                ${csrfField(ctx)}
+                <label class="sr" for="role-sel-${u.id}">Role</label>
+                <select id="role-sel-${u.id}" name="role" style="font-weight: 700;">
+                  <option value="member"${u.role === 'member' ? html` selected` : ''}>👤 Member (Citizen)</option>
+                  <option value="mod"${u.role === 'mod' ? html` selected` : ''}>⚔️ Moderator</option>
+                  <option value="admin"${u.role === 'admin' ? html` selected` : ''}>🛡️ Admin</option>
+                  <option value="root_admin"${u.role === 'root_admin' ? html` selected` : ''}>👑 Root Admin (Owner)</option>
+                </select>
+                <label class="sr" for="title-inp-${u.id}">Title</label>
+                <input id="title-inp-${u.id}" name="title" value="${u.staff_title || ''}" placeholder="Staff Title (e.g. Founder)" maxlength="40">
+                <button class="btn btn-ghost btn-sm" type="submit">Update Role</button>
+              </form>
+
+              <!-- Ban / Unban Form -->
+              ${u.id === ctx.user.id
+                ? html`<span class="muted" style="font-size: 0.82rem;">Account is protected (Your own account)</span>`
+                : u.banned
+                  ? html`<form method="post" action="/admin/users/${u.id}/unban" class="ban-action-form">
+                      ${csrfField(ctx)}
+                      <button class="btn btn-ghost btn-sm" type="submit" style="color: #4ade80; border-color: rgba(74, 222, 128, 0.4);">
+                        ✅ Unblock / Restore Account
+                      </button>
+                    </form>`
+                  : html`<form method="post" action="/admin/users/${u.id}/ban" class="ban-action-form">
+                      ${csrfField(ctx)}
+                      <label class="sr" for="ban-rsn-${u.id}">Block reason</label>
+                      <input id="ban-rsn-${u.id}" name="reason" placeholder="Reason for block..." maxlength="200" required>
+                      <button class="btn btn-danger btn-sm" type="submit">
+                        🚫 Block Account
+                      </button>
+                    </form>`}
+            </div>
+          </div>`
+        )}
+    </div>
+  </div>`;
+
+  return page(ctx, { title: 'Root Master Console | Fide City', body, robots: 'noindex, nofollow' });
+}
+
+module.exports = { dashboard, rootConsole };
+

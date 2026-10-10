@@ -103,14 +103,24 @@ function page(ctx, { title, description, active = '', body, wide = false, robots
       <div class="bar-end">
         <div class="pill" data-status-pill aria-live="polite"><span class="dot" aria-hidden="true"></span><span data-status-text>Checking city</span></div>
         ${user
-          ? html`<div class="account">
-              <a class="user-link" href="/account">${user.username}</a>
+          ? html`<div class="account-capsule">
+              <a class="account-pill" href="/account" title="Account Settings">
+                <span class="avatar-badge">${user.role === 'root_admin' ? '👑' : user.role === 'admin' ? '🛡️' : user.role === 'mod' ? '⚔️' : '👤'}</span>
+                <span class="user-handle">${user.username}</span>
+                <span class="role-chip role-chip-${user.role}">${user.role === 'root_admin' ? 'Root' : user.role === 'admin' ? 'Admin' : user.role === 'mod' ? 'Mod' : 'Member'}</span>
+              </a>
               ${user.role === 'root_admin'
-                ? html`<a class="btn btn-sm" href="/admin" style="background: linear-gradient(135deg, #f8c040, #fd20d7); color: #fff; font-weight: 800; border-radius: 999px;">👑 Root Panel</a>`
+                ? html`<a class="btn-console btn-console-root" href="/admin/root" title="Root Administrator Master Console"><span>👑</span> Master Console</a>`
                 : user.role !== 'member'
-                  ? html`<a class="btn btn-quiet" href="/admin">Staff</a>`
+                  ? html`<a class="btn-console" href="/admin">Staff Panel</a>`
                   : ''}
-              <form method="post" action="/logout">${csrfField(ctx)}<button class="btn btn-quiet" type="submit">Sign out</button></form>
+              <form method="post" action="/logout" class="signout-form">
+                ${csrfField(ctx)}
+                <button class="btn-signout" type="submit" title="Sign out">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                  <span>Sign out</span>
+                </button>
+              </form>
             </div>`
           : html`<div class="account">
               <a class="btn btn-quiet" href="/login">Sign in</a>

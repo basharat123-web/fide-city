@@ -5,7 +5,7 @@ const sessions = require('../lib/session');
 const sec = require('../lib/security');
 const config = require('../lib/config');
 const view = require('../views/admin');
-const { httpError, requireUser, requireStaff, requireAdmin, intParam } = require('./helpers');
+const { httpError, requireUser, requireStaff, requireAdmin, requireRootAdmin, intParam } = require('./helpers');
 
 const q = {
   count: (t) => db.prepare(`SELECT COUNT(*) AS n FROM ${t}`),
@@ -29,6 +29,48 @@ const q = {
 };
 
 const scalar = (sql, ...args) => db.prepare(sql).get(...args).n;
+
+/* ----------------------- Root Admin Master Console -------------------- */
+get('/admin/root', requireUser, requireRootAdmin, async (ctx) => {
+  if (config.supabase && config.supabase.enabled) {
+    const { syncFromSupabase, syncLocalToSupabase } = require('../lib/supabase');
+    await syncFromSupabase();
+    await syncLocalToSupabase();
+  }
+
+  const qTerm = sec.cleanLine(ctx.query.get('q') || '', 40);
+  const filterRole = sec.str(ctx.query.get('role') || 'all', 20);
+
+  const stats = {
+    users: scalar('SELECT COUNT(*) AS n FROM users'),
+    roots: scalar("SELECT COUNT(*) AS n FROM users WHERE role = 'root_admin'"),
+    admins: scalar("SELECT COUNT(*) AS n FROM users WHERE role = 'admin'"),
+    mods: scalar("SELECT COUNT(*) AS n FROM users WHERE role = 'mod'"),
+    members: scalar("SELECT COUNT(*) AS n FROM users WHERE role = 'member'"),
+    banned: scalar('SELECT COUNT(*) AS n FROM users WHERE banned = 1'),
+  };
+
+  let sql = 'SELECT id, username, email, role, staff_title, created_at, last_login, banned, ban_reason FROM users WHERE 1=1';
+  const params = [];
+
+  if (filterRole === 'banned') {
+    sql += ' AND banned = 1';
+  } else if (['root_admin', 'admin', 'mod', 'member'].includes(filterRole)) {
+    sql += ' AND role = ?';
+    params.push(filterRole);
+  }
+
+  if (qTerm) {
+    const like = `%${qTerm.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    sql += " AND (username LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\')";
+    params.push(like, like);
+  }
+
+  sql += ' ORDER BY created_at DESC LIMIT 150';
+  const list = db.prepare(sql).all(...params);
+
+  ctx.html(view.rootConsole(ctx, { list, q: qTerm, filterRole, stats }));
+});
 
 get('/admin', requireUser, requireStaff, async (ctx) => {
   const isAdmin = ['admin', 'root_admin'].includes(ctx.user.role);
@@ -75,6 +117,11 @@ function targetUser(ctx) {
   return u;
 }
 
+function redirectBack(ctx) {
+  const ref = String(ctx.req.headers.referer || '');
+  return ref.includes('/admin/root') ? '/admin/root' : '/admin?tab=users';
+}
+
 post('/admin/users/:id/ban', requireUser, requireStaff, (ctx) => {
   const u = targetUser(ctx);
   const isRoot = ctx.user.role === 'root_admin';
@@ -91,7 +138,7 @@ post('/admin/users/:id/ban', requireUser, requireStaff, (ctx) => {
   updateUserBan(u.username, 1, reason);
   audit(ctx.user.id, 'user_ban', `${u.username}: ${reason}`, ctx.ip);
   ctx.flash('ok', `${u.username} was banned.`);
-  ctx.redirect('/admin?tab=users');
+  ctx.redirect(redirectBack(ctx));
 });
 
 post('/admin/users/:id/unban', requireUser, requireStaff, (ctx) => {
@@ -105,7 +152,7 @@ post('/admin/users/:id/unban', requireUser, requireStaff, (ctx) => {
   updateUserBan(u.username, 0, null);
   audit(ctx.user.id, 'user_unban', u.username, ctx.ip);
   ctx.flash('ok', `${u.username} was unbanned.`);
-  ctx.redirect('/admin?tab=users');
+  ctx.redirect(redirectBack(ctx));
 });
 
 post('/admin/users/:id/role', requireUser, requireAdmin, (ctx) => {
@@ -129,7 +176,7 @@ post('/admin/users/:id/role', requireUser, requireAdmin, (ctx) => {
 
   audit(ctx.user.id, 'user_role', `${u.username}: ${u.role} -> ${role}`, ctx.ip);
   ctx.flash('ok', `${u.username} is now ${role}.`);
-  ctx.redirect('/admin?tab=users');
+  ctx.redirect(redirectBack(ctx));
 });
 
 /* -------------------------------- News -------------------------------- */
