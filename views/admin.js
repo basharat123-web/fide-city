@@ -218,8 +218,8 @@ function rootConsole(ctx, { list, q = '', filterRole = 'all', stats = {} }) {
                 ${csrfField(ctx)}
                 <label class="sr" for="role-sel-${u.id}">City Role</label>
                 <select id="role-sel-${u.id}" name="title" style="font-weight: 700; max-width: 240px;">
-                  <optgroup label="👑 Executive Management">
-                    ${CITY_ROLES.filter((r) => r.category === 'Executive').map((r) => html`<option value="${r.name}"${(u.staff_title || (u.role === 'root_admin' ? 'Project Management' : '')) === r.name ? html` selected` : ''}>${r.icon} ${r.name}</option>`)}
+                  <optgroup label="🛡️ Executive & Administrators">
+                    ${CITY_ROLES.filter((r) => r.category === 'Executive' && (u.email && u.email.toLowerCase().trim() === 'basharathussain.mail@gmail.com' ? true : r.systemRole !== 'root_admin')).map((r) => html`<option value="${r.name}"${(u.staff_title || '') === r.name ? html` selected` : ''}>${r.icon} ${r.name}</option>`)}
                   </optgroup>
                   <optgroup label="⚔️ Staff & Administration">
                     ${CITY_ROLES.filter((r) => r.category === 'Staff').map((r) => html`<option value="${r.name}"${u.staff_title === r.name ? html` selected` : ''}>${r.icon} ${r.name}</option>`)}

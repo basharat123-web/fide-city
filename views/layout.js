@@ -85,13 +85,13 @@ function page(ctx, { title, description, active = '', body, wide = false, robots
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&family=Instrument+Sans:ital,wght@0,400..700;1,400..700&display=swap">
-  <link rel="stylesheet" href="/css/style.css?v=2.5">
+  <link rel="stylesheet" href="/css/style.css?v=3.0">
   <script src="/js/main.js" defer></script>
 </head>
 <body class="${active ? `page-${active}` : ''}">
   <a class="skip" href="#main">Skip to content</a>
   <header class="site-header">
-    <div class="wrap bar">
+    <div class="header-wrap bar">
       <a class="brand" href="/" aria-label="${config.server.name} home">
         <img src="/img/logo-256.png" width="48" height="48" alt="">
         <span class="brand-text">Fide City<small>Roleplay</small></span>
@@ -105,14 +105,16 @@ function page(ctx, { title, description, active = '', body, wide = false, robots
         <div class="pill" data-status-pill aria-live="polite"><span class="dot" aria-hidden="true"></span><span data-status-text>Checking city</span></div>
         ${user
           ? (() => {
+              const isRoot = Boolean(user.role === 'root_admin' || (user.email && user.email.toLowerCase().trim() === 'basharathussain.mail@gmail.com'));
               const uMeta = getRoleMeta(user);
+              const chipLabel = isRoot ? '👑 Root Admin' : uMeta.name;
               return html`<div class="account-capsule">
-                <a class="account-pill" href="/account" title="Account Settings: ${uMeta.name}">
-                  <span class="avatar-badge" style="border: 1.5px solid ${uMeta.color};">${uMeta.icon}</span>
+                <a class="account-pill" href="/account" title="Account: ${user.username} (${chipLabel})">
+                  <span class="avatar-badge" style="border: 1.5px solid ${isRoot ? '#ffd700' : uMeta.color};">${isRoot ? '👑' : uMeta.icon}</span>
                   <span class="user-handle">${user.username}</span>
-                  <span class="role-chip" style="background: ${uMeta.color}28; color: ${uMeta.color}; border: 1px solid ${uMeta.color}77;">${uMeta.name}</span>
+                  <span class="role-chip" style="background: ${isRoot ? 'linear-gradient(135deg, rgba(248, 192, 64, 0.25), rgba(253, 32, 215, 0.25))' : `${uMeta.color}28`}; color: ${isRoot ? '#ffd700' : uMeta.color}; border: 1px solid ${isRoot ? 'rgba(248, 192, 64, 0.6)' : `${uMeta.color}77`};">${chipLabel}</span>
                 </a>
-                ${user.role === 'root_admin'
+                ${isRoot
                   ? html`<a class="btn-console btn-console-root" href="/admin/root" title="Root Administrator Master Console"><span>👑</span> Master Console</a>`
                   : user.role !== 'member'
                     ? html`<a class="btn-console" href="/admin">Staff Panel</a>`

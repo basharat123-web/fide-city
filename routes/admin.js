@@ -162,25 +162,28 @@ post('/admin/users/:id/unban', requireUser, requireStaff, async (ctx) => {
   ctx.redirect(redirectBack(ctx));
 });
 
-post('/admin/users/:id/role', requireUser, requireAdmin, async (ctx) => {
+post('/admin/users/:id/role', requireUser, requireRootAdmin, async (ctx) => {
   const u = await targetUser(ctx);
-  const isRoot = ctx.user.role === 'root_admin';
   let role = sec.str(ctx.body.role, 15);
   let title = sec.cleanLine(ctx.body.title, 50);
 
   const { findRoleByName, DEFAULT_ROLE_NAME } = require('../lib/roles');
   const cityRole = findRoleByName(title);
-  if (cityRole && isRoot && !role) {
+  if (cityRole && !role) {
     role = cityRole.systemRole;
   }
   if (!role) role = cityRole ? cityRole.systemRole : 'member';
 
-  const allowedRoles = isRoot ? ['member', 'mod', 'admin', 'root_admin'] : ['member', 'mod'];
-  if (!allowedRoles.includes(role)) throw httpError(400, 'Invalid role or insufficient permissions.');
-
-  if (!isRoot && (u.role === 'admin' || u.role === 'root_admin')) {
-    throw httpError(403, 'Only Root Admin can change staff/admin roles.');
+  const isTargetRootEmail = u.email && u.email.toLowerCase().trim() === config.rootAdminEmail;
+  if (!isTargetRootEmail && role === 'root_admin') {
+    role = 'admin';
+    if (title === 'Project Management' || title === 'Curator Of Project') {
+      title = 'Chief Administrator';
+    }
   }
+
+  const allowedRoles = isTargetRootEmail ? ['member', 'mod', 'admin', 'root_admin'] : ['member', 'mod', 'admin'];
+  if (!allowedRoles.includes(role)) throw httpError(400, 'Invalid role or insufficient permissions.');
 
   if (!title) {
     title = role === 'root_admin' ? 'Project Management' : role === 'admin' ? 'Server Administrator' : role === 'mod' ? 'Junior Administrator' : DEFAULT_ROLE_NAME;

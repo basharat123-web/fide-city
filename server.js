@@ -12,7 +12,16 @@ try {
   // Error pages and signed-in user lookup
   app.setErrorRenderer((ctx, status, message) => ctx.html(pages.errorPage(ctx, status, message), status));
   const loadUser = db.prepare('SELECT id, username, email, role, staff_title, created_at, banned FROM users WHERE id = ?');
-  app.setUserLoader((id) => loadUser.get(id));
+  app.setUserLoader((id) => {
+    const u = loadUser.get(id);
+    if (!u) return null;
+    if (u.email && u.email.toLowerCase().trim() === config.rootAdminEmail) {
+      u.role = 'root_admin';
+    } else if (u.role === 'root_admin') {
+      u.role = 'admin';
+    }
+    return u;
+  });
 
   // Routes
   require('./routes/public');

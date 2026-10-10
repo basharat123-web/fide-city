@@ -45,22 +45,18 @@ async function requireAdmin(ctx) {
 
 async function requireRootAdmin(ctx) {
   if (!ctx.user) throw httpError(404, 'Page not found');
-  if (ctx.user.role !== 'root_admin') {
-    const config = require('../lib/config');
-    if (config.supabase && config.supabase.enabled) {
-      const { syncFromSupabase } = require('../lib/supabase');
-      await syncFromSupabase();
-      const { db } = require('../lib/db');
-      const u = db.prepare('SELECT id, username, email, role, staff_title, created_at, banned FROM users WHERE id = ?').get(ctx.user.id);
-      if (u) ctx.user = u;
-    }
-  }
-  if (!ctx.user || ctx.user.role !== 'root_admin') throw httpError(404, 'Page not found');
+  const config = require('../lib/config');
+  const isMatch = ctx.user.email && ctx.user.email.toLowerCase().trim() === config.rootAdminEmail;
+  if (!isMatch) throw httpError(404, 'Page not found');
 }
 
 const isStaff = (u) => Boolean(u && ['mod', 'admin', 'root_admin'].includes(u.role));
 const isAdmin = (u) => Boolean(u && ['admin', 'root_admin'].includes(u.role));
-const isRootAdmin = (u) => Boolean(u && u.role === 'root_admin');
+const isRootAdmin = (u) => {
+  if (!u || !u.email) return false;
+  const config = require('../lib/config');
+  return u.email.toLowerCase().trim() === config.rootAdminEmail;
+};
 
 function intParam(v) {
   return /^\d{1,9}$/.test(String(v)) ? Number(v) : null;
