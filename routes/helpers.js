@@ -21,7 +21,7 @@ async function requireStaff(ctx) {
       const { syncFromSupabase } = require('../lib/supabase');
       await syncFromSupabase();
       const { db } = require('../lib/db');
-      const u = db.prepare('SELECT id, username, email, role, staff_title, created_at, banned FROM users WHERE id = ?').get(ctx.user.id);
+      const u = db.prepare('SELECT id, username, email, role, staff_title, avatar, created_at, banned FROM users WHERE id = ?').get(ctx.user.id);
       if (u) ctx.user = u;
     }
   }
@@ -36,7 +36,7 @@ async function requireAdmin(ctx) {
       const { syncFromSupabase } = require('../lib/supabase');
       await syncFromSupabase();
       const { db } = require('../lib/db');
-      const u = db.prepare('SELECT id, username, email, role, staff_title, created_at, banned FROM users WHERE id = ?').get(ctx.user.id);
+      const u = db.prepare('SELECT id, username, email, role, staff_title, avatar, created_at, banned FROM users WHERE id = ?').get(ctx.user.id);
       if (u) ctx.user = u;
     }
   }

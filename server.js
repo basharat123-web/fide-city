@@ -11,7 +11,7 @@ try {
 
   // Error pages and signed-in user lookup
   app.setErrorRenderer((ctx, status, message) => ctx.html(pages.errorPage(ctx, status, message), status));
-  const loadUser = db.prepare('SELECT id, username, email, role, staff_title, created_at, banned FROM users WHERE id = ?');
+  const loadUser = db.prepare('SELECT id, username, email, role, staff_title, avatar, created_at, banned FROM users WHERE id = ?');
   app.setUserLoader((id) => {
     const u = loadUser.get(id);
     if (!u) return null;

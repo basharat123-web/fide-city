@@ -212,6 +212,8 @@ async function main() {
       check('avatar updates successfully (303)', avRes.status === 303);
       const updatedUser = db.prepare("SELECT avatar FROM users WHERE username = 'boss'").get();
       check('avatar persisted in database', updatedUser && updatedUser.avatar === 'https://example.com/avatar.png');
+      const homeAfterAvatar = await adm.get('/');
+      check('header shows user avatar on home page', homeAfterAvatar.text.includes('src="https://example.com/avatar.png"'));
 
       console.log('\nForgot Password and OTP Verification');
       const fpGet = await anon.get('/forgot-password');

@@ -10,10 +10,10 @@ const { httpError, requireUser, requireStaff, requireAdmin, requireRootAdmin, in
 const q = {
   count: (t) => db.prepare(`SELECT COUNT(*) AS n FROM ${t}`),
   users: db.prepare(`
-    SELECT id, username, email, role, staff_title, created_at, last_login, banned, ban_reason
+    SELECT id, username, email, role, staff_title, avatar, created_at, last_login, banned, ban_reason
     FROM users ORDER BY created_at DESC LIMIT 100`),
   search: db.prepare(`
-    SELECT id, username, email, role, staff_title, created_at, last_login, banned, ban_reason
+    SELECT id, username, email, role, staff_title, avatar, created_at, last_login, banned, ban_reason
     FROM users WHERE username LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\' ORDER BY created_at DESC LIMIT 100`),
   user: db.prepare('SELECT * FROM users WHERE id = ?'),
   ban: db.prepare('UPDATE users SET banned = 1, ban_reason = ? WHERE id = ?'),
