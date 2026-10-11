@@ -1,21 +1,28 @@
 {
   "name": "fide-city-roleplay",
   "version": "1.0.0",
-  "description": "Official website and community forum for Fide City Roleplay (zero dependencies)",
+  "description": "Official website and community forum for Fide City Roleplay",
   "private": true,
   "main": "server.js",
   "engines": {
     "node": ">=22.13"
   },
   "scripts": {
-    "start": "node --disable-warning=ExperimentalWarning server.js",
-    "dev": "node --disable-warning=ExperimentalWarning --watch server.js",
+    "start": "next start",
+    "dev": "next dev",
+    "build": "next build",
+    "legacy:start": "node --disable-warning=ExperimentalWarning server.js",
+    "legacy:dev": "node --disable-warning=ExperimentalWarning --watch server.js",
     "create-admin": "node --disable-warning=ExperimentalWarning scripts/create-admin.js",
     "create-root-admin": "node --disable-warning=ExperimentalWarning scripts/create-root-admin.js",
+    "migrate:supabase": "node --disable-warning=ExperimentalWarning scripts/migrate-sqlite-to-supabase.js",
     "test": "node --disable-warning=ExperimentalWarning scripts/smoke-test.js"
   },
   "license": "UNLICENSED",
   "dependencies": {
-    "@supabase/supabase-js": "^2.117.3"
+    "@supabase/supabase-js": "^2.117.3",
+    "next": "^16.0.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
   }
 }

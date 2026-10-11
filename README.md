@@ -1,6 +1,26 @@
 # Fide City Roleplay – website and forum
 
-Official site for Fide City Roleplay: home page, how to play, organizations, FAQ, rules, news, team page, member accounts and a moderated forum. No npm packages to install. It runs on plain Node.js 22.13 or newer.
+Official site for Fide City Roleplay: home page, how to play, organizations, FAQ, rules, news, team page, member accounts and a moderated forum. The Next.js app requires Node.js 22.13 or newer and the packages in `package.json`. The legacy Node server remains available as a fallback during migration.
+
+The Next.js App Router implementation is the target for Vercel. The legacy Node server remains available for the existing deployment until the Supabase schema and data migration are applied and validated.
+
+## Migrating SQLite data to Supabase
+
+1. Back up the SQLite database and run `supabase/schema.sql` in the Supabase SQL Editor.
+2. Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in the environment where the migration is run. Use a private machine; the service-role key must never be exposed to a browser.
+3. Review a read-only count of the source data:
+
+   ```bash
+   npm run migrate:supabase -- --sqlite=data/fidecity.db
+   ```
+
+4. After reviewing the counts and ensuring the source file is the intended production database, run:
+
+   ```bash
+   npm run migrate:supabase -- --apply --sqlite=data/fidecity.db
+   ```
+
+The migration is additive and repeatable: existing Supabase rows are not overwritten, and imported rows are tagged with migration keys. It maps users by existing migration key, username, or email, remaps forum/session foreign keys, migrates active sessions and unexpired password-reset codes, and excludes the known sample accounts and forum threads unless `--include-demo-data` is explicitly supplied. Rows whose referenced user/category cannot be mapped are skipped with a warning. Inspect the completion output and validate the destination data before changing Vercel routing. No live database is modified by the default dry run.
 
 ## Run it on your computer
 
