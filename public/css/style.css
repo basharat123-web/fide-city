@@ -1350,9 +1350,48 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--m
   border-color: #ef4444;
   color: #f87171;
 }
-@keyframes prefixToastIn {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+/* Dark Dropdown Selects & Option Styling */
+select,
+.admin-role-select,
+.status-mod-select,
+.mod-cat-select {
+  background-color: #160228 !important;
+  color: #f8fafc !important;
+  color-scheme: dark !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+}
+
+select option,
+select optgroup,
+.admin-role-select option,
+.admin-role-select optgroup,
+.status-mod-select option,
+.mod-cat-select option {
+  background-color: #18032c !important;
+  color: #f8fafc !important;
+  font-weight: 600 !important;
+  padding: 8px 12px !important;
+}
+
+select optgroup,
+.admin-role-select optgroup {
+  background-color: #0f011c !important;
+  color: #f8c040 !important;
+  font-weight: 800 !important;
+  font-size: 0.85rem !important;
+  padding: 8px 6px !important;
+}
+
+select option:checked,
+.admin-role-select option:checked {
+  background-color: #2e038f !important;
+  color: #ffffff !important;
+}
+
+select option:hover,
+.admin-role-select option:hover {
+  background-color: #3b0764 !important;
+  color: #ffffff !important;
 }
 
 /* Responsive Layout */

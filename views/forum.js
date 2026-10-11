@@ -426,21 +426,21 @@ function thread(ctx, { t, cat, posts, pageNo, pages, canReply, allCategories = [
             ${perms.canLock ? html`<form method="post" action="/forum/thread/${t.id}/lock">${csrfField(ctx)}<button class="btn btn-ghost btn-sm" type="submit">${t.locked ? 'Unlock' : 'Lock'}</button></form>` : ''}
             ${perms.canDelete ? html`<form method="post" action="/forum/thread/${t.id}/delete" data-confirm="Delete this thread and all its replies?">${csrfField(ctx)}<button class="btn btn-danger btn-sm" type="submit">Delete thread</button></form>` : ''}
             ${perms.canTagStatus ? html`<form method="post" action="/forum/thread/${t.id}/status" style="display:inline-block; margin:0;" class="status-mod-form">${csrfField(ctx)}
-                <select name="status" class="status-mod-select" onchange="this.form.submit()" style="padding: 0.35rem 0.6rem; border-radius: 6px; font-size: 0.8rem; background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: #fff; cursor: pointer;">
-                  <option value=""${!t.status ? ' selected' : ''}>🏷️ Prefix...</option>
-                  <option value="IMPORTANT"${t.status === 'IMPORTANT' ? ' selected' : ''}>🔴 IMPORTANT</option>
-                  <option value="Approved"${t.status === 'Approved' ? ' selected' : ''}>✅ Approved</option>
-                  <option value="Rejected"${t.status === 'Rejected' ? ' selected' : ''}>❌ Rejected</option>
-                  <option value="Reviewed"${t.status === 'Reviewed' ? ' selected' : ''}>📋 Reviewed</option>
-                  <option value="On Consideration"${t.status === 'On Consideration' ? ' selected' : ''}>⏳ On Consideration</option>
-                  <option value="Pending Review"${t.status === 'Pending Review' ? ' selected' : ''}>⚠️ Pending Review</option>
-                  ${t.status ? html`<option value="">✕ (No prefix)</option>` : ''}
+                <select name="status" class="status-mod-select" onchange="this.form.submit()" style="padding: 0.35rem 0.6rem; border-radius: 6px; font-size: 0.8rem; background: #160228; border: 1px solid var(--border); color: #fff; cursor: pointer; color-scheme: dark;">
+                  <option value=""${!t.status ? ' selected' : ''} style="background: #18032c; color: #fff;">🏷️ Prefix...</option>
+                  <option value="IMPORTANT"${t.status === 'IMPORTANT' ? ' selected' : ''} style="background: #18032c; color: #ef4444;">🔴 IMPORTANT</option>
+                  <option value="Approved"${t.status === 'Approved' ? ' selected' : ''} style="background: #18032c; color: #22c55e;">✅ Approved</option>
+                  <option value="Rejected"${t.status === 'Rejected' ? ' selected' : ''} style="background: #18032c; color: #94a3b8;">❌ Rejected</option>
+                  <option value="Reviewed"${t.status === 'Reviewed' ? ' selected' : ''} style="background: #18032c; color: #86efac;">📋 Reviewed</option>
+                  <option value="On Consideration"${t.status === 'On Consideration' ? ' selected' : ''} style="background: #18032c; color: #facc15;">⏳ On Consideration</option>
+                  <option value="Pending Review"${t.status === 'Pending Review' ? ' selected' : ''} style="background: #18032c; color: #fbbf24;">⚠️ Pending Review</option>
+                  ${t.status ? html`<option value="" style="background: #18032c; color: #fff;">✕ (No prefix)</option>` : ''}
                 </select>
               </form>` : ''}
             ${perms.canMove && allCategories && allCategories.length ? html`<form method="post" action="/forum/thread/${t.id}/move" style="display:inline-block; margin:0;">${csrfField(ctx)}
-                <select name="category_id" onchange="this.form.submit()" style="padding: 0.35rem 0.6rem; border-radius: 6px; font-size: 0.8rem; background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: #fff; cursor: pointer;">
-                  <option value="">📁 Move To...</option>
-                  ${allCategories.map((c) => html`<option value="${c.id}"${c.id === t.category_id ? ' disabled' : ''}>${c.name}</option>`)}
+                <select name="category_id" class="mod-cat-select" onchange="this.form.submit()" style="padding: 0.35rem 0.6rem; border-radius: 6px; font-size: 0.8rem; background: #160228; border: 1px solid var(--border); color: #fff; cursor: pointer; color-scheme: dark;">
+                  <option value="" style="background: #18032c; color: #fff;">📁 Move To...</option>
+                  ${allCategories.map((c) => html`<option value="${c.id}"${c.id === t.category_id ? ' disabled' : ''} style="background: #18032c; color: #fff;">${c.name}</option>`)}
                 </select>
               </form>` : ''}
           </div>`

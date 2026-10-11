@@ -87,23 +87,23 @@ function users(ctx, { list, q, perms }) {
                 ${perms.canChangeRole && (u.role !== 'root_admin' || isRoot)
                   ? html`<form method="post" action="/admin/users/${u.id}/role" class="row-form role-update-form" style="display:inline-flex; align-items:center; gap:0.4rem; margin:0.25rem 0;">${csrfField(ctx)}
                       <label class="sr" for="role-sel-${u.id}">City Role</label>
-                      <select id="role-sel-${u.id}" name="title" style="padding: 0.35rem 0.6rem; border-radius: 6px; font-weight: 700; font-size: 0.8rem; background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: #fff; max-width: 220px; cursor: pointer;">
+                      <select id="role-sel-${u.id}" name="title" class="admin-role-select" style="padding: 0.38rem 0.65rem; border-radius: 6px; font-weight: 700; font-size: 0.82rem; background: #160228; border: 1px solid var(--border); color: #fff; max-width: 220px; cursor: pointer; color-scheme: dark;">
                         ${isRoot ? html`
-                          <optgroup label="👑 Executive Management">
-                            ${CITY_ROLES.filter((r) => r.category === 'Executive' && (u.email && u.email.toLowerCase().trim() === config.rootAdminEmail ? true : r.systemRole !== 'root_admin')).map((r) => html`<option value="${r.name}"${(u.staff_title || '') === r.name ? html` selected` : ''}>${r.icon} ${r.name}</option>`)}
+                          <optgroup label="👑 Executive Management" style="background: #0f011c; color: #f8c040; font-weight: 800;">
+                            ${CITY_ROLES.filter((r) => r.category === 'Executive' && (u.email && u.email.toLowerCase().trim() === config.rootAdminEmail ? true : r.systemRole !== 'root_admin')).map((r) => html`<option value="${r.name}"${(u.staff_title || '') === r.name ? html` selected` : ''} style="background: #18032c; color: #f8fafc; font-weight: 600;">${r.icon} ${r.name}</option>`)}
                           </optgroup>
                         ` : ''}
-                        <optgroup label="🛡️ Operations & Administration">
-                          ${CITY_ROLES.filter((r) => (r.category === 'Operations Head' || r.category === 'Engineering') && r.systemRole !== 'root_admin').map((r) => html`<option value="${r.name}"${(u.staff_title || '') === r.name ? html` selected` : ''}>${r.icon} ${r.name}</option>`)}
+                        <optgroup label="🛡️ Operations & Administration" style="background: #0f011c; color: #38bdf8; font-weight: 800;">
+                          ${CITY_ROLES.filter((r) => (r.category === 'Operations Head' || r.category === 'Engineering') && r.systemRole !== 'root_admin').map((r) => html`<option value="${r.name}"${(u.staff_title || '') === r.name ? html` selected` : ''} style="background: #18032c; color: #f8fafc; font-weight: 600;">${r.icon} ${r.name}</option>`)}
                         </optgroup>
-                        <optgroup label="⚔️ Staff & Moderation">
-                          ${CITY_ROLES.filter((r) => (r.category === 'Senior Staff' || r.category === 'Field Staff' || r.category === 'Staff')).map((r) => html`<option value="${r.name}"${u.staff_title === r.name ? html` selected` : ''}>${r.icon} ${r.name}</option>`)}
+                        <optgroup label="⚔️ Staff & Moderation" style="background: #0f011c; color: #a855f7; font-weight: 800;">
+                          ${CITY_ROLES.filter((r) => (r.category === 'Senior Staff' || r.category === 'Field Staff' || r.category === 'Staff')).map((r) => html`<option value="${r.name}"${u.staff_title === r.name ? html` selected` : ''} style="background: #18032c; color: #f8fafc; font-weight: 600;">${r.icon} ${r.name}</option>`)}
                         </optgroup>
-                        <optgroup label="🏛️ City & Faction Leadership">
-                          ${CITY_ROLES.filter((r) => r.category === 'City Leadership').map((r) => html`<option value="${r.name}"${u.staff_title === r.name ? html` selected` : ''}>${r.icon} ${r.name}</option>`)}
+                        <optgroup label="🏛️ City & Faction Leadership" style="background: #0f011c; color: #4ade80; font-weight: 800;">
+                          ${CITY_ROLES.filter((r) => r.category === 'City Leadership').map((r) => html`<option value="${r.name}"${u.staff_title === r.name ? html` selected` : ''} style="background: #18032c; color: #f8fafc; font-weight: 600;">${r.icon} ${r.name}</option>`)}
                         </optgroup>
-                        <optgroup label="🎮 Community & Citizens">
-                          ${CITY_ROLES.filter((r) => r.category === 'Community').map((r) => html`<option value="${r.name}"${(u.staff_title || 'EN | Player') === r.name ? html` selected` : ''}>${r.icon} ${r.name}</option>`)}
+                        <optgroup label="🎮 Community & Citizens" style="background: #0f011c; color: #f43f5e; font-weight: 800;">
+                          ${CITY_ROLES.filter((r) => r.category === 'Community').map((r) => html`<option value="${r.name}"${(u.staff_title || 'EN | Player') === r.name ? html` selected` : ''} style="background: #18032c; color: #f8fafc; font-weight: 600;">${r.icon} ${r.name}</option>`)}
                         </optgroup>
                       </select>
                       <button class="btn btn-ghost btn-sm" type="submit" style="color: #60a5fa; border-color: rgba(96, 165, 250, 0.4); padding: 0.35rem 0.65rem;">Save Role</button>
