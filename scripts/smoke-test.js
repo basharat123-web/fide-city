@@ -59,9 +59,11 @@ class Client {
 }
 
 async function main() {
-  // Seed an admin directly in the DB.
+  // Seed staff accounts directly in the DB.
   const adminHash = await sec.hashPassword('Correct-Horse-Battery-9');
   db.prepare("INSERT INTO users (username, email, password_hash, role, staff_title, created_at) VALUES ('boss', 'boss@example.com', ?, 'admin', 'Chief Administrator', ?)").run(adminHash, Date.now());
+  const modHash = await sec.hashPassword('Correct-Horse-Battery-9');
+  db.prepare("INSERT INTO users (username, email, password_hash, role, staff_title, created_at) VALUES ('moderator', 'moderator@example.com', ?, 'mod', 'Assistant Administrator', ?)").run(modHash, Date.now());
 
   const server = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', path.join(__dirname, '..', 'server.js')], { env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = '';
@@ -151,8 +153,23 @@ async function main() {
     check('script tags are escaped in thread view', view.text.includes('&lt;script&gt;alert(1)&lt;/script&gt;') && !view.text.includes('<script>alert(1)'));
     check('title markup is escaped', view.text.includes('Hello &lt;b&gt;city&lt;/b&gt;') && !view.text.includes('Hello <b>city</b>'));
     check('event handler attribute cannot execute', !/<img src=x onerror/.test(view.text));
+    const firstPostId = db.prepare('SELECT MIN(id) AS id FROM posts WHERE thread_id = ?').get(Number(threadUrl.split('/').pop())).id;
+    const memberEdit = await player.get(`/forum/post/${firstPostId}/edit`);
+    check('members cannot open post editor', memberEdit.status === 404);
+    const memberEditPost = await player.post(`/forum/post/${firstPostId}/edit`, {
+      _csrf: player.csrf(view.text), title: 'Tampered title', body: 'Tampered form content',
+    });
+    check('members cannot edit posted forms', memberEditPost.status === 404);
     const quick = await player.post(threadUrl + '/reply', { _csrf: player.csrf(view.text), body: 'Quick reply right away' });
     check('posting again immediately is throttled', quick.status === 400 && /too quickly/.test(quick.text));
+    const mod = new Client();
+    const modLogin = await mod.get('/login');
+    const modSignedIn = await mod.post('/login', {
+      _csrf: mod.csrf(modLogin.text), username: 'moderator', password: 'Correct-Horse-Battery-9',
+    });
+    check('moderator login works', modSignedIn.status === 303);
+    const modEdit = await mod.get(`/forum/post/${firstPostId}/edit`);
+    check('moderators cannot open post editor', modEdit.status === 404);
     const lockedCat = await player.get('/forum/announcements/new');
     check('members cannot start threads in staff-only category', lockedCat.status === 403);
     const staffRoom = await player.get('/forum/staff');
@@ -188,6 +205,18 @@ async function main() {
       check('session id rotates on login', Object.values(adm.cookies)[0] !== preSid2);
       const dash = await adm.get('/admin?tab=users');
       check('admin dashboard loads', dash.status === 200 && dash.text.includes('player_one'));
+      const adminEdit = await adm.get(`/forum/post/${firstPostId}/edit`);
+      check('admin can open post editor', adminEdit.status === 200 && adminEdit.text.includes('Form content'));
+      const saveEdit = await adm.post(`/forum/post/${firstPostId}/edit`, {
+        _csrf: adm.csrf(adminEdit.text),
+        title: 'Admin-updated application',
+        body: 'An admin has updated this submitted application form.',
+      });
+      const editedPost = db.prepare('SELECT body FROM posts WHERE id = ?').get(firstPostId);
+      const editedThread = db.prepare('SELECT title FROM threads WHERE id = ?').get(Number(threadUrl.split('/').pop()));
+      check('admin can edit thread title and form content', saveEdit.status === 303 &&
+        editedThread.title === 'Admin-updated application' &&
+        editedPost.body === 'An admin has updated this submitted application form.');
       const pid = db.prepare("SELECT id FROM users WHERE username = 'player_one'").get().id;
       const ban = await adm.post(`/admin/users/${pid}/ban`, { _csrf: adm.csrf(dash.text), reason: 'testing' });
       check('admin can ban a member', ban.status === 303);

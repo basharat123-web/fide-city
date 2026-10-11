@@ -3,7 +3,7 @@ const { get, post } = require('../lib/http');
 const { db, tx, audit } = require('../lib/db');
 const sec = require('../lib/security');
 const view = require('../views/forum');
-const { httpError, requireUser, requireStaff, isStaff, intParam, pageParam } = require('./helpers');
+const { httpError, requireUser, requireStaff, requireAdmin, isStaff, intParam, pageParam } = require('./helpers');
 const { getPermissions } = require('../lib/roles');
 
 const PER_PAGE_THREADS = 20;
@@ -85,6 +85,9 @@ const q = {
   insPost: db.prepare('INSERT INTO posts (thread_id, user_id, body, created_at) VALUES (?, ?, ?, ?)'),
   bump: db.prepare('UPDATE threads SET reply_count = reply_count + 1, updated_at = ? WHERE id = ?'),
   post: db.prepare('SELECT * FROM posts WHERE id = ? AND deleted = 0'),
+  updatePostBody: db.prepare('UPDATE posts SET body = ? WHERE id = ?'),
+  updateThreadTitle: db.prepare('UPDATE threads SET title = ?, updated_at = ? WHERE id = ?'),
+  updateThreadTimestamp: db.prepare('UPDATE threads SET updated_at = ? WHERE id = ?'),
   delPost: db.prepare('UPDATE posts SET deleted = 1 WHERE id = ?'),
   unbump: db.prepare('UPDATE threads SET reply_count = MAX(0, reply_count - 1) WHERE id = ?'),
   pin: db.prepare('UPDATE threads SET pinned = 1 - pinned WHERE id = ?'),
@@ -310,6 +313,43 @@ post('/forum/thread/:id/reply', requireUser, (ctx) => {
   const total = q.postCount.get(t.id).n;
   const lastPage = Math.max(1, Math.ceil(total / PER_PAGE_POSTS));
   ctx.redirect(`/forum/thread/${t.id}?page=${lastPage}#post-${pid}`);
+});
+
+/* ------------------------------- Editing ------------------------------ */
+get('/forum/post/:id/edit', requireUser, requireAdmin, (ctx) => {
+  const id = intParam(ctx.params.id);
+  const p = id && q.post.get(id);
+  if (!p) throw httpError(404, 'Page not found');
+  const { t, cat } = visibleThread(ctx, String(p.thread_id));
+  const isFirstPost = q.firstPost.get(t.id).id === p.id;
+  ctx.html(view.editPost(ctx, { t, cat, post: p, isFirstPost }));
+});
+
+post('/forum/post/:id/edit', requireUser, requireAdmin, (ctx) => {
+  const id = intParam(ctx.params.id);
+  const p = id && q.post.get(id);
+  if (!p) throw httpError(404, 'Page not found');
+  const { t, cat } = visibleThread(ctx, String(p.thread_id));
+  const isFirstPost = q.firstPost.get(t.id).id === p.id;
+  const title = isFirstPost ? sec.cleanLine(ctx.body.title, 120) : t.title;
+  const body = sec.clean(ctx.body.body, 5000);
+  const errors = {};
+
+  if (isFirstPost && title.length < 3) errors.title = 'Give your thread a title of at least 3 characters.';
+  if (body.length < (isFirstPost ? 10 : 2)) errors.body = `Write at least ${isFirstPost ? 10 : 2} characters.`;
+  if (Object.keys(errors).length) {
+    return ctx.html(view.editPost(ctx, { t, cat, post: { ...p, body }, isFirstPost, title, errors }), 400);
+  }
+
+  const now = Date.now();
+  tx(() => {
+    q.updatePostBody.run(body, p.id);
+    if (isFirstPost) q.updateThreadTitle.run(title, now, t.id);
+    else q.updateThreadTimestamp.run(now, t.id);
+  });
+  audit(ctx.user.id, 'forum_post_edit', `post ${p.id} in thread ${t.id}`, ctx.ip);
+  ctx.flash('ok', 'Post updated.');
+  ctx.redirect(`/forum/thread/${t.id}#post-${p.id}`);
 });
 
 /* ---------------------------- Moderation ------------------------------ */

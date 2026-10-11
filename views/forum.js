@@ -4,6 +4,7 @@ const { page, csrfField, fmtDateTime, timeAgo } = require('./layout');
 const { getRoleMeta, getPermissions } = require('../lib/roles');
 
 const isStaff = (u) => u && ['mod', 'admin', 'root_admin'].includes(u.role);
+const canEditForumPost = (u) => u && ['admin', 'root_admin'].includes(u.role);
 
 const roleBadge = (u) => {
   const meta = getRoleMeta(u);
@@ -557,7 +558,7 @@ function thread(ctx, { t, cat, posts, pageNo, pages, canReply, allCategories = [
             ${roleBadge(p)}
           </aside>
           <div class="post-main">
-            <header class="post-meta"><time datetime="${new Date(p.created_at).toISOString()}">${fmtDateTime(p.created_at)}</time>${p.id === t.first_post_id ? '' : html` <a href="#post-${p.id}" class="permalink" aria-label="Link to this reply">#${(pageNo - 1) * 20 + i + 1}</a>`}</header>
+            <header class="post-meta"><time datetime="${new Date(p.created_at).toISOString()}">${fmtDateTime(p.created_at)}</time>${p.id === t.first_post_id ? '' : html` <a href="#post-${p.id}" class="permalink" aria-label="Link to this reply">#${(pageNo - 1) * 20 + i + 1}</a>`}${canEditForumPost(ctx.user) ? html` <a class="permalink" href="/forum/post/${p.id}/edit">Edit</a>` : ''}</header>
             <div class="post-body">${p.body}</div>
             ${perms.canDeletePost && p.id !== t.first_post_id
               ? html`<form class="post-mod" method="post" action="/forum/post/${p.id}/delete" data-confirm="Delete this reply?">${csrfField(ctx)}<button class="link-btn" type="submit">Delete reply</button></form>`
@@ -634,4 +635,30 @@ function newThread(ctx, { cat, errors = {}, values = {} }) {
   return page(ctx, { title: `New thread in ${cat.name}`, active: 'forum', body, robots: 'noindex' });
 }
 
-module.exports = { index, category, thread, newThread, isStaff };
+function editPost(ctx, { t, cat, post, isFirstPost, title = t.title, errors = {} }) {
+  const body = html`<div class="wrap prose-wrap">
+    ${crumbs([{ label: 'Forum', href: '/forum' }, { label: cat.name, href: `/forum/${cat.slug}` }, { label: t.title, href: `/forum/thread/${t.id}` }, { label: 'Edit post' }])}
+    <h1 class="page-title">Edit ${isFirstPost ? 'thread and form' : 'reply'}</h1>
+    <form class="form card" method="post" action="/forum/post/${post.id}/edit">
+      ${csrfField(ctx)}
+      ${isFirstPost ? html`<div class="field${errors.title ? ' has-error' : ''}">
+        <label for="title">Thread title</label>
+        <input id="title" name="title" type="text" maxlength="120" required value="${title}">
+        ${errors.title ? html`<p class="form-error" role="alert">${errors.title}</p>` : ''}
+      </div>` : ''}
+      <div class="field${errors.body ? ' has-error' : ''}">
+        <label for="body">${isFirstPost ? 'Form content' : 'Reply content'}</label>
+        <textarea id="body" name="body" rows="10" maxlength="5000" required>${post.body}</textarea>
+        ${errors.body ? html`<p class="form-error" role="alert">${errors.body}</p>` : ''}
+        <p class="hint">Plain text only. Up to 5000 characters.</p>
+      </div>
+      <div class="row-form">
+        <button class="btn btn-primary" type="submit">Save changes</button>
+        <a class="btn btn-ghost" href="/forum/thread/${t.id}">Cancel</a>
+      </div>
+    </form>
+  </div>`;
+  return page(ctx, { title: `Edit post: ${t.title}`, active: 'forum', body, robots: 'noindex' });
+}
+
+module.exports = { index, category, thread, newThread, editPost, isStaff };
