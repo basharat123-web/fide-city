@@ -26,7 +26,7 @@ function isRootTarget(ctx, u) {
 
 function roleOptions(ctx, u) {
   const rootTarget = isRootTarget(ctx, u);
-  const selectedTitle = rootTarget ? (u.additional_title || 'EN | Player') : (u.staff_title || 'EN | Player');
+  const selectedTitle = rootTarget ? (u.additional_title || u.staff_title || 'EN | Player') : (u.staff_title || 'EN | Player');
   const groups = [
     ['👑 Executive Management', CITY_ROLES.filter((r) => r.category === 'Executive')],
     ['🛡️ Operations & Administration', CITY_ROLES.filter((r) => r.category === 'Engineering' || r.category === 'Operations Head')],

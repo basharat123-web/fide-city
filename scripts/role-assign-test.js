@@ -132,13 +132,13 @@ async function run() {
     assert.ok(rootExecutiveOption && !rootExecutiveOption[1].includes('disabled'), 'Executive roles are selectable for the Root Admin');
     const rootUpdate = await root.post(`/admin/users/${rootRow.id}/role`, {
       _csrf: root.csrf(consolePage.text),
-      additional_title: 'Project Management',
+      additional_title: 'Creator of Project',
     });
     assert.strictEqual(rootUpdate.status, 303, `Root additional-role update redirects: ${rootUpdate.text}`);
     const updatedRoot = db.prepare('SELECT role, staff_title, additional_title FROM users WHERE id = ?').get(rootRow.id);
     assert.strictEqual(updatedRoot.role, 'root_admin');
-    assert.strictEqual(updatedRoot.staff_title, 'Project Management');
-    assert.strictEqual(updatedRoot.additional_title, 'Project Management');
+    assert.strictEqual(updatedRoot.staff_title, 'Creator of Project');
+    assert.strictEqual(updatedRoot.additional_title, 'Creator of Project');
     console.log('  ok   Root Admin can select an Executive role while root access remains intact');
 
     const rootAgain = new Client();
@@ -151,8 +151,10 @@ async function run() {
     const account = await rootAgain.get('/account');
     assert.strictEqual(account.status, 200);
     assert.ok(account.text.includes('👑 Root Admin'), 'Account shows the permanent Root Admin tag');
-    assert.ok(account.text.includes('Project Management'), 'Account shows the additional assigned role');
+    assert.ok(account.text.includes('Creator of Project'), 'Account shows the additional assigned role');
     assert.ok(account.text.includes('EN | Player (Permanent)'), 'Account keeps the permanent player tag');
+    const { getAssignedRoleMeta } = require('../lib/roles');
+    assert.strictEqual(getAssignedRoleMeta({ role: 'root_admin', staff_title: 'Creator of Project' }).name, 'Creator of Project', 'Legacy Supabase title remains a valid assigned-role fallback');
     console.log('  ok   Root Admin account renders all three role tags');
 
     console.log('\nAll Staff Panel role assignment tests PASSED!');

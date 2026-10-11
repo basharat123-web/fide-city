@@ -257,7 +257,7 @@ post('/admin/users/:id/role', requireUser, requireStaff, async (ctx) => {
       throw httpError(400, 'Select a valid additional role.');
     }
     role = 'root_admin';
-    title = u.staff_title || 'Project Management';
+    title = assignedRole.name;
     additionalTitle = assignedRole.name;
   }
 
