@@ -40,7 +40,11 @@ CREATE TABLE IF NOT EXISTS categories (
   description TEXT NOT NULL DEFAULT '',
   sort_order  INT NOT NULL DEFAULT 0,
   staff_only  INT NOT NULL DEFAULT 0,  -- 1 = only staff (mod/admin/root_admin) can see
-  locked      INT NOT NULL DEFAULT 0   -- 1 = only staff can start threads
+  locked      INT NOT NULL DEFAULT 0,  -- 1 = only staff can start threads
+  group_name  TEXT DEFAULT 'FideCity RolePlay',
+  icon        TEXT DEFAULT '💬',
+  parent_slug TEXT DEFAULT NULL,
+  has_subforums INT NOT NULL DEFAULT 0
 );
 
 -- 3. Forum threads

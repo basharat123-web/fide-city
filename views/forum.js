@@ -351,37 +351,136 @@ function index(ctx, { categories = [], groups = {}, latestPosts = [], onlineData
 }
 
 /* ----------------------------- Category ------------------------------ */
-function category(ctx, { cat, threads, pageNo, pages, canPost }) {
-  const body = html`<div class="wrap">
-    ${crumbs([{ label: 'Forum', href: '/forum' }, { label: cat.name }])}
-    <div class="page-head">
-      <div>
-        <h1 class="page-title">${cat.name}</h1>
-        <p class="page-lead">${cat.description}</p>
+function category(ctx, { cat, parentCat, subCategories = [], threads = [], pageNo, pages, canPost }) {
+  const breadcrumbItems = [{ label: 'Forum', href: '/forum' }];
+  if (parentCat) {
+    breadcrumbItems.push({ label: parentCat.name, href: `/forum/${parentCat.slug}` });
+  }
+  breadcrumbItems.push({ label: cat.name });
+
+  const hasSubCategories = subCategories && subCategories.length > 0;
+
+  const body = html`<div class="wrap forum-category-wrap">
+    ${crumbs(breadcrumbItems)}
+
+    <div class="fc-category-header-bar">
+      <div class="fc-category-header-title-wrap">
+        <h1 class="page-title fc-category-heading">${cat.name}</h1>
+        ${cat.description ? html`<p class="page-lead fc-category-lead">${cat.description}</p>` : ''}
       </div>
-      ${canPost
-        ? html`<a class="btn btn-primary" href="/forum/${cat.slug}/new">New thread</a>`
-        : ctx.user
-          ? html`<span class="muted">Only staff can start threads here.</span>`
-          : html`<a class="btn btn-primary" href="/login">Sign in to post</a>`}
+      <div class="fc-category-header-actions">
+        ${canPost || hasSubCategories
+          ? html`<a class="btn fc-btn-post-thread" href="${hasSubCategories ? '/forum/post-thread' : `/forum/${cat.slug}/new`}">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              POST THREAD
+            </a>`
+          : ctx.user
+            ? html`<span class="muted">Only staff can start threads here.</span>`
+            : html`<a class="btn btn-primary" href="/login">Sign in to post</a>`}
+      </div>
     </div>
-    ${threads.length
-      ? html`<ul class="thread-list">
-          ${threads.map(
-            (t) => html`<li${t.pinned ? html` class="is-pinned"` : ''}>
-              <div class="thread-main">
-                <h2>${threadStatusBadge(t.status)}<a href="/forum/thread/${t.id}">${t.title}</a></h2>
-                <p class="muted">
-                  ${t.pinned ? html`<span class="badge">Pinned</span> ` : ''}${t.locked ? html`<span class="badge badge-quiet">Locked</span> ` : ''}
-                  Started by ${t.username} &middot; ${timeAgo(t.created_at)}
-                </p>
+
+    ${hasSubCategories ? html`
+      <div class="fc-subforums-card">
+        <div class="fc-subforums-table">
+          ${subCategories.map((sub) => html`
+            <div class="fc-cat-row fc-subforum-row">
+              <div class="fc-col-icon">
+                <span class="fc-bubble-icon">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                </span>
               </div>
-              <div class="thread-stat"><span class="num">${t.reply_count}</span><span class="muted">replies</span></div>
-              <div class="thread-last muted">${timeAgo(t.updated_at)}</div>
-            </li>`
-          )}
-        </ul>`
-      : html`<p class="empty">No threads here yet. ${canPost ? 'Start the first one.' : ''}</p>`}
+              <div class="fc-col-info">
+                <h3 class="fc-cat-title">
+                  <a href="/forum/${sub.slug}">${sub.name}</a>
+                </h3>
+                ${sub.children && sub.children.length > 0 ? html`
+                  <div class="fc-subforums-interactive-wrap">
+                    <button type="button" class="fc-subforums-interactive-toggle" aria-expanded="false" title="View sub-forums">
+                      Sub-forums <span class="arrow-down">▾</span>
+                    </button>
+                    <div class="fc-subforums-popover" style="display: none;">
+                      <ul class="fc-subforums-popover-list">
+                        ${sub.children.map(child => html`
+                          <li>
+                            <a href="/forum/${child.slug}">
+                              <span class="subforum-dot">•</span>
+                              ${child.name}
+                            </a>
+                          </li>
+                        `)}
+                      </ul>
+                    </div>
+                  </div>
+                ` : ''}
+              </div>
+              <div class="fc-col-stats">
+                <div class="fc-stat-item">
+                  <span class="fc-stat-num">${sub.thread_count || 0}</span>
+                  <span class="fc-stat-lbl">Threads</span>
+                </div>
+                <div class="fc-stat-item">
+                  <span class="fc-stat-num">${sub.post_count || 0}</span>
+                  <span class="fc-stat-lbl">Messages</span>
+                </div>
+              </div>
+              <div class="fc-col-last">
+                ${sub.last_title ? html`
+                  <div class="fc-last-post-card">
+                    <div class="fc-last-avatar">
+                      ${sub.last_avatar
+                        ? html`<img src="${sub.last_avatar}" alt="${sub.last_username}">`
+                        : html`<span>${sub.last_username ? sub.last_username.slice(0, 1).toUpperCase() : 'U'}</span>`
+                      }
+                    </div>
+                    <div class="fc-last-details">
+                      <a class="fc-last-title" href="/forum/thread/${sub.last_thread_id}">
+                        ${threadStatusBadge(sub.last_status || (sub.last_title.toLowerCase().includes('important') ? 'IMPORTANT' : sub.last_title.toLowerCase().includes('approved') ? 'Approved' : ''))}
+                        <span>${sub.last_title.replace(/^\[(IMPORTANT|Approved|Rejected|Reviewed|On Consideration|Pending Review)\]\s*/i, '')}</span>
+                      </a>
+                      <div class="fc-last-meta muted">
+                        ${fmtForumTime(sub.last_at)} &middot; <span class="fc-last-author">${sub.last_username}</span>
+                      </div>
+                    </div>
+                  </div>
+                ` : html`<span class="fc-last-none muted">None</span>`}
+              </div>
+            </div>
+          `)}
+        </div>
+      </div>
+
+      <div class="fc-subforums-footer-bar">
+        <div class="fc-subforums-footer-actions">
+          <a class="btn fc-btn-subtle" href="/forum/${cat.slug}/mark-read">MARK READ</a>
+          <a class="btn fc-btn-subtle" href="/forum/${cat.slug}/watch">WATCH</a>
+        </div>
+      </div>
+    ` : ''}
+
+    ${threads.length
+      ? html`<div class="${hasSubCategories ? 'fc-threads-section' : ''}">
+          ${hasSubCategories ? html`<h2 class="fc-section-title" style="margin: 1.5rem 0 0.75rem 0; font-size: 1.1rem;">Threads</h2>` : ''}
+          <ul class="thread-list">
+            ${threads.map(
+              (t) => html`<li${t.pinned ? html` class="is-pinned"` : ''}>
+                <div class="thread-main">
+                  <h2>${threadStatusBadge(t.status)}<a href="/forum/thread/${t.id}">${t.title}</a></h2>
+                  <p class="muted">
+                    ${t.pinned ? html`<span class="badge">Pinned</span> ` : ''}${t.locked ? html`<span class="badge badge-quiet">Locked</span> ` : ''}
+                    Started by ${t.username} &middot; ${timeAgo(t.created_at)}
+                  </p>
+                </div>
+                <div class="thread-stat"><span class="num">${t.reply_count}</span><span class="muted">replies</span></div>
+                <div class="thread-last muted">${timeAgo(t.updated_at)}</div>
+              </li>`
+            )}
+          </ul>
+        </div>`
+      : !hasSubCategories
+        ? html`<p class="empty">No threads here yet. ${canPost ? 'Start the first one.' : ''}</p>`
+        : ''}
+
     ${pager(`/forum/${cat.slug}`, pageNo, pages)}
   </div>`;
   return page(ctx, { title: cat.name, description: cat.description, active: 'forum', body });

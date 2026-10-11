@@ -85,8 +85,8 @@ function page(ctx, { title, description, active = '', body, wide = false, robots
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&family=Instrument+Sans:ital,wght@0,400..700;1,400..700&display=swap">
-  <link rel="stylesheet" href="/css/style.css?v=3.1">
-  <script src="/js/main.js?v=3.1" defer></script>
+  <link rel="stylesheet" href="/css/style.css?v=3.2">
+  <script src="/js/main.js?v=3.2" defer></script>
 </head>
 <body class="${active ? `page-${active}` : ''}">
   <div id="top-loader" class="top-loader" aria-hidden="true"></div>

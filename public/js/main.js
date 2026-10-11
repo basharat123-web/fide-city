@@ -524,4 +524,40 @@
       }, 10000);
     }
   }
+
+  // Interactive sub-forums dropdown toggle
+  document.addEventListener('click', function (e) {
+    var toggle = e.target.closest('.fc-subforums-interactive-toggle');
+    if (toggle) {
+      e.preventDefault();
+      e.stopPropagation();
+      var wrap = toggle.closest('.fc-subforums-interactive-wrap');
+      if (wrap) {
+        var menu = wrap.querySelector('.fc-subforums-popover');
+        if (menu) {
+          var isOpen = menu.style.display !== 'none';
+          document.querySelectorAll('.fc-subforums-popover').forEach(function (m) {
+            m.style.display = 'none';
+          });
+          document.querySelectorAll('.fc-subforums-interactive-toggle').forEach(function (t) {
+            t.setAttribute('aria-expanded', 'false');
+          });
+          if (!isOpen) {
+            menu.style.display = 'block';
+            toggle.setAttribute('aria-expanded', 'true');
+          }
+        }
+      }
+      return;
+    }
+
+    if (!e.target.closest('.fc-subforums-interactive-wrap')) {
+      document.querySelectorAll('.fc-subforums-popover').forEach(function (m) {
+        m.style.display = 'none';
+      });
+      document.querySelectorAll('.fc-subforums-interactive-toggle').forEach(function (t) {
+        t.setAttribute('aria-expanded', 'false');
+      });
+    }
+  });
 })();

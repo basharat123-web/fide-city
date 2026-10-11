@@ -17,9 +17,44 @@ const { touch: touchOnline, getOnlineUsers } = require('../lib/online');
 const q = {
   cats: db.prepare(`
     SELECT c.*,
-      (SELECT COUNT(*) FROM threads t WHERE t.category_id = c.id AND t.deleted = 0) AS thread_count,
-      (SELECT COUNT(*) FROM posts p JOIN threads t ON t.id = p.thread_id WHERE t.category_id = c.id AND t.deleted = 0 AND p.deleted = 0) AS post_count
-    FROM categories c WHERE (c.staff_only = 0 OR ? = 1) ORDER BY c.sort_order`),
+      (
+        SELECT COUNT(*) FROM threads t 
+        WHERE (t.category_id = c.id OR t.category_id IN (SELECT id FROM categories WHERE parent_slug = c.slug)) 
+          AND t.deleted = 0
+      ) AS thread_count,
+      (
+        SELECT COUNT(*) FROM posts p 
+        JOIN threads t ON t.id = p.thread_id 
+        WHERE (t.category_id = c.id OR t.category_id IN (SELECT id FROM categories WHERE parent_slug = c.slug)) 
+          AND t.deleted = 0 AND p.deleted = 0
+      ) AS post_count
+    FROM categories c 
+    WHERE (c.staff_only = 0 OR ? = 1) AND (c.parent_slug IS NULL OR c.parent_slug = '') 
+    ORDER BY c.sort_order`),
+  subCats: db.prepare(`
+    SELECT c.*,
+      (
+        SELECT COUNT(*) FROM threads t 
+        WHERE (t.category_id = c.id OR t.category_id IN (SELECT id FROM categories WHERE parent_slug = c.slug)) 
+          AND t.deleted = 0
+      ) AS thread_count,
+      (
+        SELECT COUNT(*) FROM posts p 
+        JOIN threads t ON t.id = p.thread_id 
+        WHERE (t.category_id = c.id OR t.category_id IN (SELECT id FROM categories WHERE parent_slug = c.slug)) 
+          AND t.deleted = 0 AND p.deleted = 0
+      ) AS post_count
+    FROM categories c 
+    WHERE c.parent_slug = ? AND (c.staff_only = 0 OR ? = 1) 
+    ORDER BY c.sort_order ASC`),
+  lastSubThread: db.prepare(`
+    SELECT t.id, t.title, t.status, t.updated_at, u.username, u.avatar 
+    FROM threads t 
+    JOIN users u ON u.id = t.user_id
+    WHERE (t.category_id = ? OR t.category_id IN (SELECT id FROM categories WHERE parent_slug = ?)) 
+      AND t.deleted = 0 
+    ORDER BY t.updated_at DESC LIMIT 1`),
+  childSubCats: db.prepare('SELECT slug, name FROM categories WHERE parent_slug = ? ORDER BY sort_order ASC'),
   lastThread: db.prepare(`
     SELECT t.id, t.title, t.status, t.updated_at, u.username, u.avatar FROM threads t JOIN users u ON u.id = t.user_id
     WHERE t.category_id = ? AND t.deleted = 0 ORDER BY t.updated_at DESC LIMIT 1`),
@@ -59,7 +94,7 @@ const q = {
 
 /** Fetch a category the current user is allowed to see, or 404. */
 function visibleCategory(ctx, slug) {
-  if (!/^[a-z0-9-]{1,40}$/.test(slug)) throw httpError(404, 'Page not found');
+  if (!/^[a-z0-9-]{1,50}$/.test(slug)) throw httpError(404, 'Page not found');
   const cat = q.cat.get(slug);
   if (!cat || (cat.staff_only && !isStaff(ctx.user))) throw httpError(404, 'Page not found');
   return cat;
@@ -130,13 +165,62 @@ get('/forum/mark-read', (ctx) => {
 /* ----------------------------- Category ------------------------------- */
 get('/forum/:slug', (ctx) => {
   const cat = visibleCategory(ctx, ctx.params.slug);
+  const staff = isStaff(ctx.user) ? 1 : 0;
+
+  const subCategories = q.subCats.all(cat.slug, staff).map((sub) => {
+    const last = q.lastSubThread.get(sub.id, sub.slug);
+    const children = q.childSubCats.all(sub.slug);
+    return {
+      ...sub,
+      last_title: last && last.title,
+      last_thread_id: last && last.id,
+      last_username: last && last.username,
+      last_avatar: last && last.avatar,
+      last_status: last && last.status,
+      last_at: last && last.updated_at,
+      children,
+    };
+  });
+
   const pageNo = pageParam(ctx);
   const total = q.threadCount.get(cat.id).n;
   const pages = Math.max(1, Math.ceil(total / PER_PAGE_THREADS));
   const p = Math.min(pageNo, pages);
   const threads = q.threads.all(cat.id, PER_PAGE_THREADS, (p - 1) * PER_PAGE_THREADS);
-  ctx.html(view.category(ctx, { cat, threads, pageNo: p, pages, canPost: canStartThread(ctx, cat) }));
+
+  let parentCat = null;
+  if (cat.parent_slug) {
+    parentCat = q.cat.get(cat.parent_slug);
+  }
+
+  ctx.html(view.category(ctx, { 
+    cat, 
+    parentCat, 
+    subCategories, 
+    threads, 
+    pageNo: p, 
+    pages, 
+    canPost: canStartThread(ctx, cat) 
+  }));
 });
+
+get('/forum/:slug/mark-read', (ctx) => {
+  const cat = visibleCategory(ctx, ctx.params.slug);
+  ctx.flash('ok', `Category "${cat.name}" marked as read.`);
+  ctx.redirect(`/forum/${cat.slug}`);
+});
+
+get('/forum/:slug/watch', (ctx) => {
+  const cat = visibleCategory(ctx, ctx.params.slug);
+  if (!ctx.user) {
+    ctx.flash('error', 'Please sign in to watch this category.');
+    return ctx.redirect('/login');
+  }
+  ctx.flash('ok', `You are now watching "${cat.name}".`);
+  ctx.redirect(`/forum/${cat.slug}`);
+});
+
+
 
 /* ----------------------------- New thread ----------------------------- */
 get('/forum/:slug/new', requireUser, (ctx) => {
