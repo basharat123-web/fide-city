@@ -5,7 +5,7 @@ const { html, raw } = require('../lib/html');
 const config = require('../lib/config');
 const content = require('../data/content');
 const { page, csrfField, fmtDate, fmtDateTime, icons } = require('./layout');
-const { getRoleMeta } = require('../lib/roles');
+const { getRoleMeta, getAssignedRoleMeta } = require('../lib/roles');
 
 const GALLERY_DIR = path.join(__dirname, '..', 'public', 'img', 'gallery');
 
@@ -294,7 +294,7 @@ function team(ctx, { staff }) {
     <h2 class="sub-title">Staff on the forum</h2>
     ${staff.length
       ? html`<ul class="staff-list">
-          ${staff.map((s) => html`<li>${s.avatar ? html`<img class="avatar" src="${s.avatar}" alt="${s.username}" style="object-fit: cover;">` : html`<span class="avatar" aria-hidden="true">${s.username.slice(0, 1).toUpperCase()}</span>`}<div><strong>${s.username}</strong><span class="muted">${s.staff_title || (s.role === 'admin' ? 'Admin' : 'Moderator')}</span></div></li>`)}
+          ${staff.map((s) => html`<li>${s.avatar ? html`<img class="avatar" src="${s.avatar}" alt="${s.username}" style="object-fit: cover;">` : html`<span class="avatar" aria-hidden="true">${s.username.slice(0, 1).toUpperCase()}</span>`}<div><strong>${s.username}</strong><span class="muted">${s.role === 'root_admin' ? `👑 Root Admin · ${s.additional_title || 'EN | Player'} · 🎮 EN | Player` : (s.staff_title || (s.role === 'admin' ? 'Admin' : 'Moderator'))}</span></div></li>`)}
         </ul>`
       : html`<p class="empty">No staff are listed yet. Admins can add titles from the staff dashboard.</p>`}
   </div>`;
@@ -328,12 +328,14 @@ function newsStory(ctx, { story, author }) {
 /* ------------------------------ Account ------------------------------- */
 function account(ctx, { errors = {} } = {}) {
   const u = ctx.user;
-  const meta = getRoleMeta(u);
+  const isRoot = u.role === 'root_admin' || (u.email && u.email.toLowerCase().trim() === 'basharathussain.mail@gmail.com');
+  const meta = isRoot ? getAssignedRoleMeta(u) : getRoleMeta(u);
   const body = html`<div class="wrap prose-wrap">
     <h1 class="page-title">Your account</h1>
     <dl class="facts">
       <div><dt>Username</dt><dd>${u.username}</dd></div>
       <div><dt>Email</dt><dd>${u.email}</dd></div>
+      ${isRoot ? html`<div><dt>Access</dt><dd><span class="badge" style="background: rgba(248, 192, 64, 0.18); border: 1.5px solid rgba(248, 192, 64, 0.6); color: #ffd700; font-weight: 800; font-size: 0.88rem; padding: 0.3rem 0.85rem;">👑 Root Admin</span></dd></div>` : ''}
       <div><dt>Assigned Role</dt><dd><span class="badge" style="background: ${meta.color}25; border: 1.5px solid ${meta.color}88; color: ${meta.color}; font-weight: 800; font-size: 0.88rem; padding: 0.3rem 0.85rem;">${meta.icon} ${meta.name}</span></dd></div>
       <div><dt>Citizen Role</dt><dd><span class="badge" style="background: rgba(244, 63, 94, 0.18); border: 1.5px solid rgba(244, 63, 94, 0.5); color: #f43f5e; font-weight: 800; font-size: 0.84rem; padding: 0.25rem 0.75rem;">🎮 EN | Player (Permanent)</span></dd></div>
       <div><dt>Joined</dt><dd>${fmtDate(u.created_at)}</dd></div>

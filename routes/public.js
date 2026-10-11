@@ -23,7 +23,7 @@ get('/cookies', (ctx) => ctx.html(pages.cookies(ctx)));
 
 get('/team', (ctx) => {
   const staff = db
-    .prepare("SELECT username, role, staff_title, avatar FROM users WHERE role IN ('root_admin', 'admin', 'mod') AND banned = 0 ORDER BY CASE role WHEN 'root_admin' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END, username")
+    .prepare("SELECT username, role, staff_title, additional_title, avatar FROM users WHERE role IN ('root_admin', 'admin', 'mod') AND banned = 0 ORDER BY CASE role WHEN 'root_admin' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END, username")
     .all();
   ctx.html(pages.team(ctx, { staff }));
 });

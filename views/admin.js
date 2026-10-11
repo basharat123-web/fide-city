@@ -1,18 +1,47 @@
 'use strict';
 const { html } = require('../lib/html');
 const { page, csrfField, fmtDate, fmtDateTime } = require('./layout');
-const { getPermissions, getRoleMeta, CITY_ROLES } = require('../lib/roles');
+const { getPermissions, getRoleMeta, getAssignedRoleMeta, CITY_ROLES } = require('../lib/roles');
 const config = require('../lib/config');
 
 function cityRoleBadge(u) {
-  const meta = getRoleMeta(u);
+  const isRoot = u.role === 'root_admin' || (u.email && u.email.toLowerCase().trim() === config.rootAdminEmail);
+  const meta = isRoot ? getAssignedRoleMeta(u) : getRoleMeta(u);
   const isPrimaryPlayer = meta.name === 'EN | Player';
   return html`
+    ${isRoot ? html`<span class="badge" style="background: rgba(248, 192, 64, 0.18); border: 1.5px solid rgba(248, 192, 64, 0.6); color: #ffd700; font-weight: 800; font-size: 0.76rem;">👑 Root Admin</span>` : ''}
     <span class="badge" style="background: ${meta.color}25; border: 1.5px solid ${meta.color}88; color: ${meta.color}; font-weight: 800; font-size: 0.76rem; letter-spacing: 0.03em;">${meta.icon} ${meta.name}</span>
     ${!isPrimaryPlayer
       ? html`<span class="badge" style="background: rgba(244, 63, 94, 0.18); border: 1.5px solid rgba(244, 63, 94, 0.5); color: #f43f5e; font-weight: 800; font-size: 0.74rem; letter-spacing: 0.02em; margin-top: 0.2rem; display: inline-block;">🎮 EN | Player</span>`
       : ''}
   `;
+}
+
+function roleOptions(u) {
+  const isRootTarget = u.role === 'root_admin' || (u.email && u.email.toLowerCase().trim() === config.rootAdminEmail);
+  const selectedTitle = isRootTarget ? (u.additional_title || 'EN | Player') : (u.staff_title || 'EN | Player');
+  const groups = [
+    ['👑 Executive Management', CITY_ROLES.filter((r) => r.category === 'Executive')],
+    ['🛡️ Operations & Administration', CITY_ROLES.filter((r) => r.category === 'Engineering' || r.category === 'Operations Head')],
+    ['⚔️ Staff & Moderation', CITY_ROLES.filter((r) => ['Senior Staff', 'Field Staff', 'Staff'].includes(r.category))],
+    ['🏛️ City & Faction Leadership', CITY_ROLES.filter((r) => r.category === 'City Leadership')],
+    ['🎮 Community & Citizens', CITY_ROLES.filter((r) => r.category === 'Community')],
+  ];
+  return groups.map(([label, roles]) => html`<optgroup label="${label}">
+    ${roles.map((r) => html`<option value="${r.name}"${selectedTitle === r.name ? html` selected` : ''}${r.systemRole === 'root_admin' ? html` disabled` : ''}>${r.icon} ${r.name}</option>`)}
+  </optgroup>`);
+}
+
+function roleEditor(ctx, u, className = 'row-form role-update-form') {
+  const isRootTarget = u.role === 'root_admin' || (u.email && u.email.toLowerCase().trim() === config.rootAdminEmail);
+  return html`<form method="post" action="/admin/users/${u.id}/role" class="${className}">
+    ${csrfField(ctx)}
+    <label class="sr" for="role-sel-${u.id}">City Role</label>
+    <select id="role-sel-${u.id}" name="${isRootTarget ? 'additional_title' : 'title'}" class="admin-role-select" style="padding: 0.38rem 0.65rem; border-radius: 6px; font-weight: 700; font-size: 0.82rem; background: #160228; border: 1px solid var(--border); color: #fff; max-width: 240px; cursor: pointer; color-scheme: dark;">
+      ${roleOptions(u)}
+    </select>
+    <button class="btn btn-ghost btn-sm" type="submit">Save Role</button>
+  </form>`;
 }
 
 function tabs(active, perms) {
@@ -64,7 +93,9 @@ function users(ctx, { list, q, perms }) {
           <td>${u.last_login ? fmtDateTime(u.last_login) : 'Never'}</td>
           <td class="actions">
             ${u.id === ctx.user.id
-              ? html`<span class="muted">You</span>`
+              ? isRoot
+                ? roleEditor(ctx, u)
+                : html`<span class="muted">You</span>`
               : html`
                 ${u.banned
                   ? perms.canUnban
@@ -85,29 +116,7 @@ function users(ctx, { list, q, perms }) {
                   : ''}
 
                 ${perms.canChangeRole && (u.role !== 'root_admin' || isRoot)
-                  ? html`<form method="post" action="/admin/users/${u.id}/role" class="row-form role-update-form" style="display:inline-flex; align-items:center; gap:0.4rem; margin:0.25rem 0;">${csrfField(ctx)}
-                      <label class="sr" for="role-sel-${u.id}">City Role</label>
-                      <select id="role-sel-${u.id}" name="title" class="admin-role-select" style="padding: 0.38rem 0.65rem; border-radius: 6px; font-weight: 700; font-size: 0.82rem; background: #160228; border: 1px solid var(--border); color: #fff; max-width: 220px; cursor: pointer; color-scheme: dark;">
-                        ${isRoot ? html`
-                          <optgroup label="👑 Executive Management" style="background: #0f011c; color: #f8c040; font-weight: 800;">
-                            ${CITY_ROLES.filter((r) => r.category === 'Executive' && (u.email && u.email.toLowerCase().trim() === config.rootAdminEmail ? true : r.systemRole !== 'root_admin')).map((r) => html`<option value="${r.name}"${(u.staff_title || '') === r.name ? html` selected` : ''} style="background: #18032c; color: #f8fafc; font-weight: 600;">${r.icon} ${r.name}</option>`)}
-                          </optgroup>
-                        ` : ''}
-                        <optgroup label="🛡️ Operations & Administration" style="background: #0f011c; color: #38bdf8; font-weight: 800;">
-                          ${CITY_ROLES.filter((r) => (r.category === 'Operations Head' || r.category === 'Engineering') && r.systemRole !== 'root_admin').map((r) => html`<option value="${r.name}"${(u.staff_title || '') === r.name ? html` selected` : ''} style="background: #18032c; color: #f8fafc; font-weight: 600;">${r.icon} ${r.name}</option>`)}
-                        </optgroup>
-                        <optgroup label="⚔️ Staff & Moderation" style="background: #0f011c; color: #a855f7; font-weight: 800;">
-                          ${CITY_ROLES.filter((r) => (r.category === 'Senior Staff' || r.category === 'Field Staff' || r.category === 'Staff')).map((r) => html`<option value="${r.name}"${u.staff_title === r.name ? html` selected` : ''} style="background: #18032c; color: #f8fafc; font-weight: 600;">${r.icon} ${r.name}</option>`)}
-                        </optgroup>
-                        <optgroup label="🏛️ City & Faction Leadership" style="background: #0f011c; color: #4ade80; font-weight: 800;">
-                          ${CITY_ROLES.filter((r) => r.category === 'City Leadership').map((r) => html`<option value="${r.name}"${u.staff_title === r.name ? html` selected` : ''} style="background: #18032c; color: #f8fafc; font-weight: 600;">${r.icon} ${r.name}</option>`)}
-                        </optgroup>
-                        <optgroup label="🎮 Community & Citizens" style="background: #0f011c; color: #f43f5e; font-weight: 800;">
-                          ${CITY_ROLES.filter((r) => r.category === 'Community').map((r) => html`<option value="${r.name}"${(u.staff_title || 'EN | Player') === r.name ? html` selected` : ''} style="background: #18032c; color: #f8fafc; font-weight: 600;">${r.icon} ${r.name}</option>`)}
-                        </optgroup>
-                      </select>
-                      <button class="btn btn-ghost btn-sm" type="submit" style="color: #60a5fa; border-color: rgba(96, 165, 250, 0.4); padding: 0.35rem 0.65rem;">Save Role</button>
-                    </form>`
+                  ? roleEditor(ctx, u)
                   : ''}`}
           </td>
         </tr>`
@@ -269,25 +278,7 @@ function rootConsole(ctx, { list, q = '', filterRole = 'all', stats = {} }) {
 
             <div class="user-card-actions">
               <!-- City Role Selector Form -->
-              <form method="post" action="/admin/users/${u.id}/role" class="role-update-form">
-                ${csrfField(ctx)}
-                <label class="sr" for="role-sel-${u.id}">City Role</label>
-                <select id="role-sel-${u.id}" name="title" style="font-weight: 700; max-width: 240px;">
-                  <optgroup label="🛡️ Executive & Administrators">
-                    ${CITY_ROLES.filter((r) => r.category === 'Executive' && (u.email && u.email.toLowerCase().trim() === 'basharathussain.mail@gmail.com' ? true : r.systemRole !== 'root_admin')).map((r) => html`<option value="${r.name}"${(u.staff_title || '') === r.name ? html` selected` : ''}>${r.icon} ${r.name}</option>`)}
-                  </optgroup>
-                  <optgroup label="⚔️ Staff & Administration">
-                    ${CITY_ROLES.filter((r) => r.category === 'Staff').map((r) => html`<option value="${r.name}"${u.staff_title === r.name ? html` selected` : ''}>${r.icon} ${r.name}</option>`)}
-                  </optgroup>
-                  <optgroup label="🏛️ City & Faction Leadership">
-                    ${CITY_ROLES.filter((r) => r.category === 'City Leadership').map((r) => html`<option value="${r.name}"${u.staff_title === r.name ? html` selected` : ''}>${r.icon} ${r.name}</option>`)}
-                  </optgroup>
-                  <optgroup label="🎮 Community & Players">
-                    ${CITY_ROLES.filter((r) => r.category === 'Community').map((r) => html`<option value="${r.name}"${(u.staff_title || 'EN | Player') === r.name ? html` selected` : ''}>${r.icon} ${r.name}</option>`)}
-                  </optgroup>
-                </select>
-                <button class="btn btn-ghost btn-sm" type="submit">Save Role</button>
-              </form>
+              ${roleEditor(ctx, u, 'role-update-form')}
 
               <!-- Ban / Unban Form -->
               ${u.id === ctx.user.id
@@ -317,4 +308,3 @@ function rootConsole(ctx, { list, q = '', filterRole = 'all', stats = {} }) {
 }
 
 module.exports = { dashboard, rootConsole };
-

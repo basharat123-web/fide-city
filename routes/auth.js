@@ -347,7 +347,7 @@ get('/account', requireUser, async (ctx) => {
       await syncFromSupabase();
     } catch (_) {}
   }
-  const loadUser = db.prepare('SELECT id, username, email, role, staff_title, avatar, created_at, banned FROM users WHERE id = ?');
+  const loadUser = db.prepare('SELECT id, username, email, role, staff_title, additional_title, avatar, created_at, banned FROM users WHERE id = ?');
   ctx.user = loadUser.get(ctx.user.id) || ctx.user;
   ctx.html(pages.account(ctx));
 });

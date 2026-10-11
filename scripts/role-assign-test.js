@@ -12,7 +12,9 @@ process.env.DB_PATH = path.join(TMP, 'test.db');
 process.env.PORT = String(PORT);
 process.env.SITE_URL = `http://localhost:${PORT}`;
 process.env.NODE_ENV = 'development';
+process.env.ROOT_ADMIN_EMAIL = 'rootboss@example.test';
 
+const config = require('../lib/config');
 const sec = require('../lib/security');
 const { db } = require('../lib/db');
 
@@ -46,6 +48,12 @@ class Client {
   get(p) { return this.request('GET', p); }
   post(p, body) { return this.request('POST', p, { body }); }
   csrf(html) { const m = /name="_csrf" value="([^"]+)"/.exec(html); return m ? m[1] : ''; }
+  roleOptions(html, id) {
+    const start = html.indexOf(`<select id="role-sel-${id}"`);
+    const end = html.indexOf('</select>', start);
+    assert.ok(start >= 0 && end > start, `Role selector for ${id} is present`);
+    return [...html.slice(start, end).matchAll(/<option value="([^"]+)"/g)].map((match) => match[1]);
+  }
 }
 
 async function run() {
@@ -53,6 +61,7 @@ async function run() {
   const userHash = await sec.hashPassword('Pass-12345!');
   const chief = db.prepare("INSERT INTO users (username, email, password_hash, role, staff_title, created_at) VALUES ('chief_admin', 'chief@fidecity.com', ?, 'admin', 'Chief Administrator', ?)").run(adminHash, Date.now());
   const player = db.prepare("INSERT INTO users (username, email, password_hash, role, staff_title, created_at) VALUES ('test_citizen', 'citizen@fidecity.com', ?, 'member', 'EN | Player', ?)").run(userHash, Date.now());
+  db.prepare("INSERT INTO users (username, email, password_hash, role, staff_title, additional_title, created_at) VALUES ('rootboss', ?, ?, 'root_admin', 'Project Management', 'EN | Player', ?)").run(config.rootAdminEmail, userHash, Date.now());
   const playerId = Number(player.lastInsertRowid);
 
   const server = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', path.join(__dirname, '..', 'server.js')], { env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -101,6 +110,47 @@ async function run() {
     const dashAfter = await adm.get('/admin?tab=users');
     assert.ok(dashAfter.text.includes('Governor'), 'Staff Panel renders updated Governor badge');
     console.log('  ok   Staff Panel reflects new badge on the page');
+
+    // 6. Root Admin can assign an additional title without changing root access.
+    const root = new Client();
+    const rootLoginPage = await root.get('/login');
+    const rootLogin = await root.post('/login', {
+      _csrf: root.csrf(rootLoginPage.text),
+      username: 'rootboss',
+      password: 'Pass-12345!',
+    });
+    assert.strictEqual(rootLogin.status, 303, 'Root Admin logged in');
+
+    const consolePage = await root.get('/admin/root');
+    assert.strictEqual(consolePage.status, 200, 'Root Master Console loads');
+    assert.ok(consolePage.text.includes('name="additional_title"'), 'Root role selector edits an additional title');
+    assert.ok(consolePage.text.includes('name="title"'), 'Other account selectors keep the normal title field');
+    const rootRow = db.prepare("SELECT id FROM users WHERE email = ?").get(config.rootAdminEmail);
+    assert.deepStrictEqual(root.roleOptions(consolePage.text, rootRow.id), adm.roleOptions(dashAfter.text, playerId), 'Root and staff selectors have the same complete role list');
+    const rootUpdate = await root.post(`/admin/users/${rootRow.id}/role`, {
+      _csrf: root.csrf(consolePage.text),
+      additional_title: 'Governor',
+    });
+    assert.strictEqual(rootUpdate.status, 303, `Root additional-role update redirects: ${rootUpdate.text}`);
+    const updatedRoot = db.prepare('SELECT role, staff_title, additional_title FROM users WHERE id = ?').get(rootRow.id);
+    assert.strictEqual(updatedRoot.role, 'root_admin');
+    assert.strictEqual(updatedRoot.staff_title, 'Project Management');
+    assert.strictEqual(updatedRoot.additional_title, 'Governor');
+    console.log('  ok   Root Admin additional role persists while root access remains intact');
+
+    const rootAgain = new Client();
+    const reloginPage = await rootAgain.get('/login');
+    await rootAgain.post('/login', {
+      _csrf: rootAgain.csrf(reloginPage.text),
+      username: 'rootboss',
+      password: 'Pass-12345!',
+    });
+    const account = await rootAgain.get('/account');
+    assert.strictEqual(account.status, 200);
+    assert.ok(account.text.includes('👑 Root Admin'), 'Account shows the permanent Root Admin tag');
+    assert.ok(account.text.includes('Governor'), 'Account shows the additional assigned role');
+    assert.ok(account.text.includes('EN | Player (Permanent)'), 'Account keeps the permanent player tag');
+    console.log('  ok   Root Admin account renders all three role tags');
 
     console.log('\nAll Staff Panel role assignment tests PASSED!');
   } finally {

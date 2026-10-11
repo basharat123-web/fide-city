@@ -1,7 +1,7 @@
 'use strict';
 const { html, raw } = require('../lib/html');
 const config = require('../lib/config');
-const { getRoleMeta, getPermissions } = require('../lib/roles');
+const { getRoleMeta, getAssignedRoleMeta, getPermissions } = require('../lib/roles');
 
 const NAV = [
   { key: 'home', href: '/', label: 'Home' },
@@ -120,8 +120,8 @@ function page(ctx, { title, description, active = '', body, wide = false, robots
           ? (() => {
               const isRoot = Boolean(user.role === 'root_admin' || (user.email && user.email.toLowerCase().trim() === 'basharathussain.mail@gmail.com'));
               const perms = getPermissions(user);
-              const uMeta = getRoleMeta(user);
-              const chipLabel = isRoot ? '👑 Root Admin' : uMeta.name;
+              const uMeta = isRoot ? getAssignedRoleMeta(user) : getRoleMeta(user);
+              const chipLabel = isRoot ? `👑 Root Admin · ${uMeta.name} · 🎮 EN | Player` : uMeta.name;
               return html`<div class="account-capsule">
                 <a class="account-pill" href="/account" title="Account: ${user.username} (${chipLabel})">
                   ${user.avatar

@@ -1,15 +1,17 @@
 'use strict';
 const { html } = require('../lib/html');
 const { page, csrfField, fmtDateTime, timeAgo } = require('./layout');
-const { getRoleMeta, getPermissions } = require('../lib/roles');
+const { getRoleMeta, getAssignedRoleMeta, getPermissions } = require('../lib/roles');
 
 const isStaff = (u) => u && ['mod', 'admin', 'root_admin'].includes(u.role);
 const canEditForumPost = (u) => u && ['admin', 'root_admin'].includes(u.role);
 
 const roleBadge = (u) => {
-  const meta = getRoleMeta(u);
+  const isRoot = u.role === 'root_admin' || (u.email && String(u.email).toLowerCase().trim() === 'basharathussain.mail@gmail.com');
+  const meta = isRoot ? getAssignedRoleMeta(u) : getRoleMeta(u);
   const isPrimaryPlayer = meta.name === 'EN | Player';
   return html`
+    ${isRoot ? html`<span class="badge" style="background: rgba(248, 192, 64, 0.18); border: 1px solid rgba(248, 192, 64, 0.6); color: #ffd700; font-weight: 800; font-size: 0.72rem;">👑 Root Admin</span>` : ''}
     <span class="badge" style="background: ${meta.color}25; border: 1px solid ${meta.color}77; color: ${meta.color}; font-weight: 700; font-size: 0.72rem; letter-spacing: 0.03em;">${meta.icon} ${meta.name}</span>
     ${!isPrimaryPlayer
       ? html`<span class="badge" style="background: rgba(244, 63, 94, 0.18); border: 1px solid rgba(244, 63, 94, 0.5); color: #f43f5e; font-weight: 700; font-size: 0.68rem; margin-top: 0.2rem; display: inline-block;">🎮 EN | Player</span>`
@@ -279,7 +281,7 @@ function index(ctx, { categories = [], groups = {}, latestPosts = [], onlineData
           <div class="fc-online-body">
             <div class="fc-online-chips">
               ${onlineUsers.length ? onlineUsers.map((u) => html`
-                <a class="fc-online-chip" href="/account" style="background: ${u.color}25; border: 1.5px solid ${u.color}88; color: ${u.color}; font-weight: 700;" title="${u.username} (${u.name})">
+                <a class="fc-online-chip" href="/account" style="background: ${u.color}25; border: 1.5px solid ${u.color}88; color: ${u.color}; font-weight: 700;" title="${u.username} (${u.isRootAdmin ? `Root Admin · ${u.name} · EN | Player` : u.name})">
                   ${u.username}
                 </a>
               `) : html`

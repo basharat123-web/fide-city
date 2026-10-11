@@ -12,15 +12,15 @@ const { getPermissions } = require('../lib/roles');
 const q = {
   count: (t) => db.prepare(`SELECT COUNT(*) AS n FROM ${t}`),
   users: db.prepare(`
-    SELECT id, username, email, role, staff_title, avatar, created_at, last_login, banned, ban_reason
+    SELECT id, username, email, role, staff_title, additional_title, avatar, created_at, last_login, banned, ban_reason
     FROM users ORDER BY created_at DESC LIMIT 100`),
   search: db.prepare(`
-    SELECT id, username, email, role, staff_title, avatar, created_at, last_login, banned, ban_reason
+    SELECT id, username, email, role, staff_title, additional_title, avatar, created_at, last_login, banned, ban_reason
     FROM users WHERE username LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\' ORDER BY created_at DESC LIMIT 100`),
   user: db.prepare('SELECT * FROM users WHERE id = ?'),
   ban: db.prepare('UPDATE users SET banned = 1, ban_reason = ? WHERE id = ?'),
   unban: db.prepare('UPDATE users SET banned = 0, ban_reason = NULL, failed_logins = 0, locked_until = 0 WHERE id = ?'),
-  role: db.prepare('UPDATE users SET role = ?, staff_title = ? WHERE id = ?'),
+  role: db.prepare('UPDATE users SET role = ?, staff_title = ?, additional_title = ? WHERE id = ?'),
   stories: db.prepare('SELECT id, slug, title, created_at FROM stories ORDER BY created_at DESC LIMIT 100'),
   slugTaken: db.prepare('SELECT 1 FROM stories WHERE slug = ?'),
   insStory: db.prepare('INSERT INTO stories (slug, title, summary, body, author_id, created_at) VALUES (?, ?, ?, ?, ?, ?)'),
@@ -53,7 +53,7 @@ get('/admin/root', requireUser, requireRootAdmin, async (ctx) => {
     banned: scalar('SELECT COUNT(*) AS n FROM users WHERE banned = 1'),
   };
 
-  let sql = 'SELECT id, username, email, role, staff_title, avatar, created_at, last_login, banned, ban_reason FROM users WHERE 1=1';
+  let sql = 'SELECT id, username, email, role, staff_title, additional_title, avatar, created_at, last_login, banned, ban_reason FROM users WHERE 1=1';
   const params = [];
 
   if (filterRole === 'banned') {
@@ -144,7 +144,7 @@ get('/admin', requireUser, requireStaff, async (ctx) => {
 });
 
 /* --------------------------- Member moderation ------------------------ */
-async function targetUser(ctx) {
+async function targetUser(ctx, { allowSelf = false } = {}) {
   const id = intParam(ctx.params.id);
   let u = id && q.user.get(id);
   if (!u && config.supabase && config.supabase.enabled) {
@@ -153,7 +153,7 @@ async function targetUser(ctx) {
     u = id && q.user.get(id);
   }
   if (!u) throw httpError(404, 'Page not found');
-  if (u.id === ctx.user.id) throw httpError(400, 'You cannot do that to your own account.');
+  if (!allowSelf && u.id === ctx.user.id) throw httpError(400, 'You cannot do that to your own account.');
   return u;
 }
 
@@ -235,8 +235,8 @@ post('/admin/users/:id/role', requireUser, requireStaff, async (ctx) => {
   const perms = getPermissions(ctx.user);
   if (!perms.canChangeRole) throw httpError(403, 'You do not have permission to assign roles.');
 
-  const u = await targetUser(ctx);
   const isCallerRoot = ctx.user.role === 'root_admin' || (ctx.user.email && ctx.user.email.toLowerCase().trim() === config.rootAdminEmail);
+  const u = await targetUser(ctx, { allowSelf: isCallerRoot });
 
   // Non-root staff cannot modify a Root Admin account
   if (!isCallerRoot && (u.role === 'root_admin' || (u.email && u.email.toLowerCase().trim() === config.rootAdminEmail))) {
@@ -244,10 +244,22 @@ post('/admin/users/:id/role', requireUser, requireStaff, async (ctx) => {
   }
 
   let title = sec.cleanLine(ctx.body.title, 50);
+  let additionalTitle = sec.cleanLine(ctx.body.additional_title, 50);
   let role = sec.str(ctx.body.role, 15);
 
   const { findRoleByName, DEFAULT_ROLE_NAME } = require('../lib/roles');
-  const cityRole = findRoleByName(title);
+  const isTargetRootEmail = u.email && u.email.toLowerCase().trim() === config.rootAdminEmail;
+  if (isTargetRootEmail) {
+    const assignedRole = findRoleByName(additionalTitle);
+    if (!assignedRole || assignedRole.systemRole === 'root_admin') {
+      throw httpError(400, 'Select a valid additional role.');
+    }
+    role = 'root_admin';
+    title = u.staff_title || 'Project Management';
+    additionalTitle = assignedRole.name;
+  }
+
+  const cityRole = isTargetRootEmail ? null : findRoleByName(title);
   if (cityRole) {
     title = cityRole.name;
     role = cityRole.systemRole;
@@ -257,7 +269,6 @@ post('/admin/users/:id/role', requireUser, requireStaff, async (ctx) => {
   }
 
   // Protection: only the official root email can hold root_admin / Executive titles
-  const isTargetRootEmail = u.email && u.email.toLowerCase().trim() === config.rootAdminEmail;
   if (!isTargetRootEmail) {
     if (role === 'root_admin') role = 'admin';
     if (title === 'Project Management' || title === 'Creator of Project' || title === 'Curator Of Project' || title === 'Root Admin') {
@@ -273,14 +284,14 @@ post('/admin/users/:id/role', requireUser, requireStaff, async (ctx) => {
   const allowedRoles = isTargetRootEmail ? ['member', 'mod', 'admin', 'root_admin'] : ['member', 'mod', 'admin'];
   if (!allowedRoles.includes(role)) throw httpError(400, 'Invalid role or insufficient permissions.');
 
-  q.role.run(role, title, u.id);
+  q.role.run(role, title, isTargetRootEmail ? additionalTitle : (u.additional_title || 'EN | Player'), u.id);
   sessions.destroyAllForUser(u.id); // force re-login so the new role takes effect cleanly
 
   const { updateUserRole } = require('../lib/supabase');
-  await updateUserRole(u.id, role, title, u.email);
+  await updateUserRole(u.id, role, title, u.email, isTargetRootEmail ? additionalTitle : (u.additional_title || 'EN | Player'));
 
-  audit(ctx.user.id, 'user_role', `${u.username}: ${u.role} (${u.staff_title || ''}) -> ${role} (${title})`, ctx.ip);
-  ctx.flash('ok', `${u.username} role updated to: ${title}.`);
+  audit(ctx.user.id, 'user_role', `${u.username}: ${u.role} (${u.staff_title || ''}) -> ${role} (${isTargetRootEmail ? additionalTitle : title})`, ctx.ip);
+  ctx.flash('ok', `${u.username} role updated to: ${isTargetRootEmail ? additionalTitle : title}.`);
   ctx.redirect(redirectBack(ctx));
 });
 

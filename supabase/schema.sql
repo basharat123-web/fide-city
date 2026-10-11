@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   role          TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('member', 'mod', 'admin', 'root_admin')),
   staff_title   TEXT DEFAULT 'EN | Player',
+  additional_title TEXT DEFAULT 'EN | Player',
   avatar        TEXT,
   created_at    BIGINT NOT NULL,
   last_login    BIGINT,
@@ -22,8 +23,12 @@ CREATE TABLE IF NOT EXISTS users (
   ban_reason    TEXT
 );
 
+ALTER TABLE users ADD COLUMN IF NOT EXISTS additional_title TEXT DEFAULT 'EN | Player';
+UPDATE users SET additional_title = 'EN | Player' WHERE additional_title IS NULL OR additional_title = '';
+
 -- Note: Run on existing DB:
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT;
+-- ALTER TABLE users ADD COLUMN IF NOT EXISTS additional_title TEXT DEFAULT 'EN | Player';
 -- ALTER TABLE users ALTER COLUMN staff_title SET DEFAULT 'EN | Player';
 -- UPDATE users SET staff_title = 'EN | Player' WHERE staff_title IS NULL;
 -- UPDATE users SET role = 'admin', staff_title = 'Chief Administrator' WHERE (staff_title = 'Project Management' OR staff_title = 'Curator Of Project' OR role = 'root_admin') AND LOWER(email) != 'basharathussain.mail@gmail.com';
