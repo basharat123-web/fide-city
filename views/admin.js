@@ -35,7 +35,7 @@ function roleOptions(ctx, u) {
     ['🎮 Community & Citizens', CITY_ROLES.filter((r) => r.category === 'Community')],
   ];
   return groups.map(([label, roles]) => html`<optgroup label="${label}">
-    ${roles.map((r) => html`<option value="${r.name}"${selectedTitle === r.name ? html` selected` : ''}${r.systemRole === 'root_admin' && !rootTarget ? html` disabled` : ''}>${r.icon} ${r.name}</option>`)}
+    ${roles.map((r) => html`<option value="${r.name}"${selectedTitle === r.name ? html` selected` : ''}>${r.icon} ${r.name}</option>`)}
   </optgroup>`);
 }
 

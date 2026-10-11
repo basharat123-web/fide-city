@@ -248,7 +248,9 @@ post('/admin/users/:id/role', requireUser, requireStaff, async (ctx) => {
   let role = sec.str(ctx.body.role, 15);
 
   const { findRoleByName, DEFAULT_ROLE_NAME } = require('../lib/roles');
-  const isTargetRootAccount = u.role === 'root_admin' || (u.email && u.email.toLowerCase().trim() === config.rootAdminEmail);
+  const isTargetRootAccount = u.role === 'root_admin'
+    || (u.email && u.email.toLowerCase().trim() === config.rootAdminEmail)
+    || (isCallerRoot && Number(u.id) === Number(ctx.user.id));
   if (isTargetRootAccount) {
     const assignedRole = findRoleByName(additionalTitle);
     if (!assignedRole) {
