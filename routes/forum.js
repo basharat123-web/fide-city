@@ -136,10 +136,10 @@ function tooFast(userId) {
 }
 
 /* ------------------------------- Index -------------------------------- */
-get('/forum', (ctx) => {
+get('/forum', async (ctx) => {
   if (ctx.user) touchOnline(ctx.user);
   const staff = isStaff(ctx.user) ? 1 : 0;
-  const categories = q.cats.all(staff).map((c) => {
+  let categories = q.cats.all(staff).map((c) => {
     const last = q.lastThread.get(c.id);
     return {
       ...c,
@@ -151,6 +151,16 @@ get('/forum', (ctx) => {
       last_at: last && last.updated_at,
     };
   });
+  if (cloudForum()) {
+    const { getForumCategoryCounts } = require('../lib/supabase');
+    const allVisibleCategories = db.prepare('SELECT * FROM categories WHERE staff_only = 0 OR ? = 1').all(staff);
+    const counts = await getForumCategoryCounts(allVisibleCategories);
+    categories = categories.map((category) => ({
+      ...category,
+      thread_count: (counts.get(category.slug) || {}).threads || 0,
+      post_count: (counts.get(category.slug) || {}).posts || 0,
+    }));
+  }
 
   const groups = {};
   for (const c of categories) {
@@ -184,7 +194,7 @@ get('/forum/:slug', async (ctx) => {
   const cat = visibleCategory(ctx, ctx.params.slug);
   const staff = isStaff(ctx.user) ? 1 : 0;
 
-  const subCategories = q.subCats.all(cat.slug, staff).map((sub) => {
+  let subCategories = q.subCats.all(cat.slug, staff).map((sub) => {
     const last = q.lastSubThread.get(sub.id, sub.slug);
     const children = q.childSubCats.all(sub.slug);
     return {
@@ -198,6 +208,16 @@ get('/forum/:slug', async (ctx) => {
       children,
     };
   });
+  if (cloudForum()) {
+    const { getForumCategoryCounts } = require('../lib/supabase');
+    const allVisibleCategories = db.prepare('SELECT * FROM categories WHERE staff_only = 0 OR ? = 1').all(staff);
+    const counts = await getForumCategoryCounts(allVisibleCategories);
+    subCategories = subCategories.map((sub) => ({
+      ...sub,
+      thread_count: (counts.get(sub.slug) || {}).threads || 0,
+      post_count: (counts.get(sub.slug) || {}).posts || 0,
+    }));
+  }
 
   const pageNo = pageParam(ctx);
   let total;

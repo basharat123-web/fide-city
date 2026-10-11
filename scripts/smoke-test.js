@@ -147,6 +147,20 @@ async function main() {
     check('duplicate username (case-insensitive) rejected', dupRes.status === 400 && /taken/.test(dupRes.text));
 
     console.log('\nForum and XSS');
+    const { rollUpForumCategoryCounts } = require('../lib/supabase');
+    const cloudCounts = rollUpForumCategoryCounts([
+      { slug: 'english-server', parent_slug: null },
+      { slug: 'application', parent_slug: 'english-server' },
+      { slug: 'admin-application', parent_slug: 'application' },
+    ], new Map([
+      ['english-server', { threads: 1, posts: 2 }],
+      ['application', { threads: 2, posts: 3 }],
+      ['admin-application', { threads: 4, posts: 7 }],
+    ]));
+    check('Supabase forum metrics include nested application forums', cloudCounts.get('english-server').threads === 7 &&
+      cloudCounts.get('english-server').posts === 12 &&
+      cloudCounts.get('application').threads === 6 &&
+      cloudCounts.get('application').posts === 10);
     const player = anon;
     const forum = await player.get('/forum/general/new');
     check('signed-in member can open new-thread form', forum.status === 200);
