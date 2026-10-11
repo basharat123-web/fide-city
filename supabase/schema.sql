@@ -47,6 +47,12 @@ CREATE TABLE IF NOT EXISTS categories (
   has_subforums INT NOT NULL DEFAULT 0
 );
 
+-- Run on existing DBs to upgrade categories created by older schema versions:
+ALTER TABLE categories ADD COLUMN IF NOT EXISTS group_name TEXT DEFAULT 'FideCity RolePlay';
+ALTER TABLE categories ADD COLUMN IF NOT EXISTS icon TEXT DEFAULT '💬';
+ALTER TABLE categories ADD COLUMN IF NOT EXISTS parent_slug TEXT;
+ALTER TABLE categories ADD COLUMN IF NOT EXISTS has_subforums INT NOT NULL DEFAULT 0;
+
 -- 3. Forum threads
 CREATE TABLE IF NOT EXISTS threads (
   id          BIGSERIAL PRIMARY KEY,
