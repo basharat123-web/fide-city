@@ -60,7 +60,7 @@ function testSupabaseRolePersistence() {
   const supabaseModule = path.join(__dirname, '..', 'lib', 'supabase.js');
   const script = `
     const assert = require('node:assert/strict');
-    const { supabase, updateUserRole } = require(${JSON.stringify(supabaseModule)});
+    const { supabase, updateUserRole, getForumThreadRecord } = require(${JSON.stringify(supabaseModule)});
     const updates = [];
     supabase.from = () => ({
       update(payload) {
@@ -75,6 +75,53 @@ function testSupabaseRolePersistence() {
       assert.equal(updates[0].staff_title, 'Project Management');
       assert.equal(updates[1].role, 'admin');
       assert.equal(updates[1].staff_title, 'Chief Administrator');
+
+      const now = Date.now();
+      const thread = { id: 2, category_id: 3, user_id: 10, title: 'Admin application', created_at: now, updated_at: now, reply_count: 0, deleted: 0 };
+      const category = { id: 3, slug: 'admin-application', name: 'Admin Application', staff_only: 0 };
+      const post = { id: 7, thread_id: 2, user_id: 10, body: 'Application details', created_at: now, deleted: 0 };
+      const authorSelections = [];
+      supabase.from = (table) => {
+        let selection = '';
+        let options = {};
+        let limited = false;
+        const result = () => {
+          if (table === 'threads') return { data: thread, error: null };
+          if (table === 'categories') return { data: category, error: null };
+          if (table === 'posts' && options.head) return { data: null, count: 1, error: null };
+          if (table === 'posts' && selection === 'id' && limited) return { data: { id: post.id }, error: null };
+          if (table === 'posts') return { data: [post], error: null };
+          if (table === 'users') {
+            authorSelections.push(selection);
+            if (selection.includes('additional_title')) {
+              return { data: null, error: { message: 'column users.additional_title does not exist' } };
+            }
+            if (selection.includes('avatar')) {
+              return { data: null, error: { message: "Could not find the 'avatar' column of 'users' in the schema cache" } };
+            }
+            return { data: [{ id: 10, username: 'form_author', role: 'member', staff_title: 'EN | Player' }], error: null };
+          }
+          throw new Error('Unexpected Supabase table: ' + table);
+        };
+        const builder = {
+          select(value, opts = {}) { selection = value; options = opts; return builder; },
+          eq() { return builder; },
+          order() { return builder; },
+          range() { return builder; },
+          limit() { limited = true; return builder; },
+          in() { return builder; },
+          maybeSingle() { return Promise.resolve(result()); },
+          then(resolve, reject) { return Promise.resolve(result()).then(resolve, reject); },
+        };
+        return builder;
+      };
+      const record = await getForumThreadRecord(2);
+      assert.equal(record.cat.slug, 'admin-application');
+      assert.equal(record.t.first_post_id, post.id);
+      assert.equal(record.posts[0].username, 'form_author');
+      assert.equal(authorSelections.length, 3, 'Missing optional author columns trigger compatibility retries');
+      assert.ok(!authorSelections[1].includes('additional_title'));
+      assert.ok(!authorSelections[2].includes('avatar'));
     })().catch((error) => {
       console.error(error);
       process.exitCode = 1;
