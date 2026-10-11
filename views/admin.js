@@ -17,9 +17,16 @@ function cityRoleBadge(u) {
   `;
 }
 
-function roleOptions(u) {
-  const isRootTarget = u.role === 'root_admin' || (u.email && u.email.toLowerCase().trim() === config.rootAdminEmail);
-  const selectedTitle = isRootTarget ? (u.additional_title || 'EN | Player') : (u.staff_title || 'EN | Player');
+function isRootTarget(ctx, u) {
+  const isRootCaller = ctx.user.role === 'root_admin' || (ctx.user.email && ctx.user.email.toLowerCase().trim() === config.rootAdminEmail);
+  return u.role === 'root_admin'
+    || (u.email && u.email.toLowerCase().trim() === config.rootAdminEmail)
+    || (isRootCaller && Number(u.id) === Number(ctx.user.id));
+}
+
+function roleOptions(ctx, u) {
+  const rootTarget = isRootTarget(ctx, u);
+  const selectedTitle = rootTarget ? (u.additional_title || 'EN | Player') : (u.staff_title || 'EN | Player');
   const groups = [
     ['👑 Executive Management', CITY_ROLES.filter((r) => r.category === 'Executive')],
     ['🛡️ Operations & Administration', CITY_ROLES.filter((r) => r.category === 'Engineering' || r.category === 'Operations Head')],
@@ -28,17 +35,17 @@ function roleOptions(u) {
     ['🎮 Community & Citizens', CITY_ROLES.filter((r) => r.category === 'Community')],
   ];
   return groups.map(([label, roles]) => html`<optgroup label="${label}">
-    ${roles.map((r) => html`<option value="${r.name}"${selectedTitle === r.name ? html` selected` : ''}${r.systemRole === 'root_admin' && !isRootTarget ? html` disabled` : ''}>${r.icon} ${r.name}</option>`)}
+    ${roles.map((r) => html`<option value="${r.name}"${selectedTitle === r.name ? html` selected` : ''}${r.systemRole === 'root_admin' && !rootTarget ? html` disabled` : ''}>${r.icon} ${r.name}</option>`)}
   </optgroup>`);
 }
 
 function roleEditor(ctx, u, className = 'row-form role-update-form') {
-  const isRootTarget = u.role === 'root_admin' || (u.email && u.email.toLowerCase().trim() === config.rootAdminEmail);
+  const rootTarget = isRootTarget(ctx, u);
   return html`<form method="post" action="/admin/users/${u.id}/role" class="${className}">
     ${csrfField(ctx)}
     <label class="sr" for="role-sel-${u.id}">City Role</label>
-    <select id="role-sel-${u.id}" name="${isRootTarget ? 'additional_title' : 'title'}" class="admin-role-select" style="padding: 0.38rem 0.65rem; border-radius: 6px; font-weight: 700; font-size: 0.82rem; background: #160228; border: 1px solid var(--border); color: #fff; max-width: 240px; cursor: pointer; color-scheme: dark;">
-      ${roleOptions(u)}
+    <select id="role-sel-${u.id}" name="${rootTarget ? 'additional_title' : 'title'}" class="admin-role-select" style="padding: 0.38rem 0.65rem; border-radius: 6px; font-weight: 700; font-size: 0.82rem; background: #160228; border: 1px solid var(--border); color: #fff; max-width: 240px; cursor: pointer; color-scheme: dark;">
+      ${roleOptions(ctx, u)}
     </select>
     <button class="btn btn-ghost btn-sm" type="submit">Save Role</button>
   </form>`;

@@ -248,8 +248,8 @@ post('/admin/users/:id/role', requireUser, requireStaff, async (ctx) => {
   let role = sec.str(ctx.body.role, 15);
 
   const { findRoleByName, DEFAULT_ROLE_NAME } = require('../lib/roles');
-  const isTargetRootEmail = u.email && u.email.toLowerCase().trim() === config.rootAdminEmail;
-  if (isTargetRootEmail) {
+  const isTargetRootAccount = u.role === 'root_admin' || (u.email && u.email.toLowerCase().trim() === config.rootAdminEmail);
+  if (isTargetRootAccount) {
     const assignedRole = findRoleByName(additionalTitle);
     if (!assignedRole) {
       throw httpError(400, 'Select a valid additional role.');
@@ -259,7 +259,7 @@ post('/admin/users/:id/role', requireUser, requireStaff, async (ctx) => {
     additionalTitle = assignedRole.name;
   }
 
-  const cityRole = isTargetRootEmail ? null : findRoleByName(title);
+  const cityRole = isTargetRootAccount ? null : findRoleByName(title);
   if (cityRole) {
     title = cityRole.name;
     role = cityRole.systemRole;
@@ -269,7 +269,7 @@ post('/admin/users/:id/role', requireUser, requireStaff, async (ctx) => {
   }
 
   // Protection: only the official root email can hold root_admin / Executive titles
-  if (!isTargetRootEmail) {
+  if (!isTargetRootAccount) {
     if (role === 'root_admin') role = 'admin';
     if (title === 'Project Management' || title === 'Creator of Project' || title === 'Curator Of Project' || title === 'Root Admin') {
       title = 'Chief Administrator';
@@ -281,17 +281,17 @@ post('/admin/users/:id/role', requireUser, requireStaff, async (ctx) => {
     throw httpError(403, 'Only Root Admin can assign Executive titles.');
   }
 
-  const allowedRoles = isTargetRootEmail ? ['member', 'mod', 'admin', 'root_admin'] : ['member', 'mod', 'admin'];
+  const allowedRoles = isTargetRootAccount ? ['member', 'mod', 'admin', 'root_admin'] : ['member', 'mod', 'admin'];
   if (!allowedRoles.includes(role)) throw httpError(400, 'Invalid role or insufficient permissions.');
 
-  q.role.run(role, title, isTargetRootEmail ? additionalTitle : (u.additional_title || 'EN | Player'), u.id);
+  q.role.run(role, title, isTargetRootAccount ? additionalTitle : (u.additional_title || 'EN | Player'), u.id);
   sessions.destroyAllForUser(u.id); // force re-login so the new role takes effect cleanly
 
   const { updateUserRole } = require('../lib/supabase');
-  await updateUserRole(u.id, role, title, u.email, isTargetRootEmail ? additionalTitle : (u.additional_title || 'EN | Player'));
+  await updateUserRole(u.id, role, title, u.email, isTargetRootAccount ? additionalTitle : (u.additional_title || 'EN | Player'));
 
-  audit(ctx.user.id, 'user_role', `${u.username}: ${u.role} (${u.staff_title || ''}) -> ${role} (${isTargetRootEmail ? additionalTitle : title})`, ctx.ip);
-  ctx.flash('ok', `${u.username} role updated to: ${isTargetRootEmail ? additionalTitle : title}.`);
+  audit(ctx.user.id, 'user_role', `${u.username}: ${u.role} (${u.staff_title || ''}) -> ${role} (${isTargetRootAccount ? additionalTitle : title})`, ctx.ip);
+  ctx.flash('ok', `${u.username} role updated to: ${isTargetRootAccount ? additionalTitle : title}.`);
   ctx.redirect(redirectBack(ctx));
 });
 
