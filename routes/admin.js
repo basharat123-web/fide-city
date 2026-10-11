@@ -248,8 +248,8 @@ post('/admin/users/:id/role', requireUser, requireStaff, async (ctx) => {
   let role = sec.str(ctx.body.role, 15);
 
   const { findRoleByName, DEFAULT_ROLE_NAME } = require('../lib/roles');
-  const isTargetRootAccount = u.role === 'root_admin'
-    || (u.email && u.email.toLowerCase().trim() === config.rootAdminEmail)
+  const isPrimaryRootAccount = u.email && u.email.toLowerCase().trim() === config.rootAdminEmail;
+  const isTargetRootAccount = isPrimaryRootAccount
     || (isCallerRoot && Number(u.id) === Number(ctx.user.id));
   if (isTargetRootAccount) {
     const assignedRole = findRoleByName(additionalTitle);
@@ -264,16 +264,16 @@ post('/admin/users/:id/role', requireUser, requireStaff, async (ctx) => {
   const cityRole = isTargetRootAccount ? null : findRoleByName(title);
   if (cityRole) {
     title = cityRole.name;
-    role = cityRole.systemRole;
+    role = cityRole.systemRole === 'root_admin' ? 'admin' : cityRole.systemRole;
   } else if (!role) {
     role = 'member';
     title = DEFAULT_ROLE_NAME;
   }
 
-  // Protection: only the official root email can hold root_admin / Executive titles
+  // Keep Root Admin exclusive while allowing delegated Project Management admin access.
   if (!isTargetRootAccount) {
     if (role === 'root_admin') role = 'admin';
-    if (title === 'Project Management' || title === 'Creator of Project' || title === 'Curator Of Project' || title === 'Root Admin') {
+    if (title !== 'Project Management' && (title === 'Creator of Project' || title === 'Curator Of Project' || title === 'Root Admin')) {
       title = 'Chief Administrator';
     }
   }

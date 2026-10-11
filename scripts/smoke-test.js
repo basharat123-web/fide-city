@@ -321,9 +321,10 @@ async function main() {
       check('reset-password succeeds with valid OTP (303)', rpPost.status === 303);
 
       console.log('\nRole clamping protection');
-      const { getRoleMeta } = require('../lib/roles');
+      const { getRoleMeta, getPermissions } = require('../lib/roles');
       const meta = getRoleMeta({ username: 'Daniyal', email: 'daniyalhussain299@gmail.com', role: 'admin', staff_title: 'Project Management' });
-      check('non-root user cannot have Project Management role badge', meta.name === 'Chief Administrator' && meta.systemRole === 'admin');
+      const permissions = getPermissions({ username: 'Daniyal', email: 'daniyalhussain299@gmail.com', role: 'admin', staff_title: 'Project Management' });
+      check('delegated Project Manager keeps title without Root Admin access', meta.name === 'Project Management' && meta.systemRole === 'admin' && permissions.canChangeRole && !permissions.hasRootConsole);
     }
 
     console.log('\nRate limiting');

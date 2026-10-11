@@ -118,7 +118,7 @@ function page(ctx, { title, description, active = '', body, wide = false, robots
         <div class="pill" data-status-pill aria-live="polite"><span class="dot" aria-hidden="true"></span><span data-status-text>Checking city</span></div>
         ${user
           ? (() => {
-              const isRoot = Boolean(user.role === 'root_admin' || (user.email && user.email.toLowerCase().trim() === 'basharathussain.mail@gmail.com'));
+              const isRoot = Boolean(user.role === 'root_admin' || (user.email && user.email.toLowerCase().trim() === config.rootAdminEmail));
               const perms = getPermissions(user);
               const uMeta = isRoot ? getAssignedRoleMeta(user) : getRoleMeta(user);
               const chipLabel = isRoot ? `👑 Root Admin · ${uMeta.name} · 🎮 EN | Player` : uMeta.name;

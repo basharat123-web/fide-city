@@ -61,8 +61,10 @@ async function run() {
   const userHash = await sec.hashPassword('Pass-12345!');
   const chief = db.prepare("INSERT INTO users (username, email, password_hash, role, staff_title, created_at) VALUES ('chief_admin', 'chief@fidecity.com', ?, 'admin', 'Chief Administrator', ?)").run(adminHash, Date.now());
   const player = db.prepare("INSERT INTO users (username, email, password_hash, role, staff_title, created_at) VALUES ('test_citizen', 'citizen@fidecity.com', ?, 'member', 'EN | Player', ?)").run(userHash, Date.now());
+  const projectManager = db.prepare("INSERT INTO users (username, email, password_hash, role, staff_title, created_at) VALUES ('project_manager', 'pm@fidecity.com', ?, 'member', 'EN | Player', ?)").run(userHash, Date.now());
   db.prepare("INSERT INTO users (username, email, password_hash, role, staff_title, additional_title, created_at) VALUES ('rootboss', ?, ?, 'root_admin', 'Project Management', 'EN | Player', ?)").run(config.rootAdminEmail, userHash, Date.now());
   const playerId = Number(player.lastInsertRowid);
+  const projectManagerId = Number(projectManager.lastInsertRowid);
 
   const server = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', path.join(__dirname, '..', 'server.js')], { env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = '';
@@ -130,6 +132,40 @@ async function run() {
     const rootSelector = consolePage.text.slice(consolePage.text.indexOf(`<select id="role-sel-${rootRow.id}"`));
     const rootExecutiveOption = rootSelector.slice(0, rootSelector.indexOf('</select>')).match(/<option value="Project Management"([^>]*)>/);
     assert.ok(rootExecutiveOption && !rootExecutiveOption[1].includes('disabled'), 'Executive roles are selectable for the Root Admin');
+    const assignPm = await root.post(`/admin/users/${projectManagerId}/role`, {
+      _csrf: root.csrf(consolePage.text),
+      title: 'Project Management',
+    });
+    assert.strictEqual(assignPm.status, 303, `Project Management role assignment redirects: ${assignPm.text}`);
+    const assignedPm = db.prepare('SELECT role, staff_title FROM users WHERE id = ?').get(projectManagerId);
+    assert.strictEqual(assignedPm.role, 'admin', 'Delegated Project Manager is not given root_admin account role');
+    assert.strictEqual(assignedPm.staff_title, 'Project Management');
+    const { getPermissions, getRoleMeta } = require('../lib/roles');
+    const pmPerms = getPermissions({ role: assignedPm.role, staff_title: assignedPm.staff_title, email: 'pm@fidecity.com' });
+    assert.ok(pmPerms.canBan && pmPerms.canRecoverAccount && pmPerms.canChangeRole && pmPerms.hasSystemPanel, 'Project Manager receives full admin tools');
+    assert.strictEqual(pmPerms.hasRootConsole, false, 'Project Manager cannot access Root Admin console');
+    assert.strictEqual(getRoleMeta({ ...assignedPm, email: 'pm@fidecity.com' }).name, 'Project Management', 'Project Management title is not clamped to Chief Administrator');
+    console.log('  ok   Delegated Project Manager gets full admin tools without Root Admin access');
+
+    const pmClient = new Client();
+    const pmLoginPage = await pmClient.get('/login');
+    const pmLogin = await pmClient.post('/login', {
+      _csrf: pmClient.csrf(pmLoginPage.text),
+      username: 'project_manager',
+      password: 'Pass-12345!',
+    });
+    assert.strictEqual(pmLogin.status, 303, 'Project Manager logs in');
+    assert.strictEqual((await pmClient.get('/admin?tab=system')).status, 200, 'Project Manager can open the full admin panel');
+    assert.strictEqual((await pmClient.get('/admin/root')).status, 404, 'Project Manager cannot access Root Admin console');
+
+    const pmConsole = await pmClient.get('/admin?tab=users');
+    const tryRootPromotion = await pmClient.post(`/admin/users/${playerId}/role`, {
+      _csrf: pmClient.csrf(pmConsole.text),
+      title: 'Project Management',
+    });
+    assert.strictEqual(tryRootPromotion.status, 403, 'Delegated Project Manager cannot grant Root Admin/Executive title');
+    assert.strictEqual(db.prepare('SELECT role FROM users WHERE id = ?').get(playerId).role, 'member', 'Rejected promotion does not modify target');
+
     const rootUpdate = await root.post(`/admin/users/${rootRow.id}/role`, {
       _csrf: root.csrf(consolePage.text),
       additional_title: 'Creator of Project',

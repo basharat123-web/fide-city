@@ -144,11 +144,12 @@ const pPcc = getPermissions(pcc);
 assert.strictEqual(pPcc.canTagStatus, false, 'PC Checker cannot edit prefix');
 console.log('  ok   Excluded roles (Community Manager, Discord Mod, PC Checker) verified blocked');
 
-// 10. Role Clamping for unauthorized users
+// 10. Delegated Project Management access without Root Admin console access
 const fakeRoot = { email: 'hacker@example.com', role: 'admin', staff_title: 'Project Management' };
 const metaFake = getRoleMeta(fakeRoot);
-assert.strictEqual(metaFake.name, 'Chief Administrator');
+assert.strictEqual(metaFake.name, 'Project Management');
 assert.strictEqual(metaFake.systemRole, 'admin');
-console.log('  ok   Non-root user clamped from claiming Executive titles');
+assert.strictEqual(getPermissions(fakeRoot).hasRootConsole, false);
+console.log('  ok   Delegated Project Manager gets admin title without Root Admin access');
 
 console.log('\nAll Permission Matrix Level checks PASSED successfully!');

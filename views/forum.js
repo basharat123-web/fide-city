@@ -7,7 +7,7 @@ const isStaff = (u) => u && ['mod', 'admin', 'root_admin'].includes(u.role);
 const canEditForumPost = (u) => u && ['admin', 'root_admin'].includes(u.role);
 
 const roleBadge = (u) => {
-  const isRoot = u.role === 'root_admin' || (u.email && String(u.email).toLowerCase().trim() === 'basharathussain.mail@gmail.com');
+  const isRoot = u.role === 'root_admin' || (u.email && String(u.email).toLowerCase().trim() === require('../lib/config').rootAdminEmail);
   const meta = isRoot ? getAssignedRoleMeta(u) : getRoleMeta(u);
   const isPrimaryPlayer = meta.name === 'EN | Player';
   return html`

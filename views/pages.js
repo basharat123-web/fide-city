@@ -328,7 +328,7 @@ function newsStory(ctx, { story, author }) {
 /* ------------------------------ Account ------------------------------- */
 function account(ctx, { errors = {} } = {}) {
   const u = ctx.user;
-  const isRoot = u.role === 'root_admin' || (u.email && u.email.toLowerCase().trim() === 'basharathussain.mail@gmail.com');
+  const isRoot = u.role === 'root_admin' || (u.email && u.email.toLowerCase().trim() === config.rootAdminEmail);
   const meta = isRoot ? getAssignedRoleMeta(u) : getRoleMeta(u);
   const body = html`<div class="wrap prose-wrap">
     <h1 class="page-title">Your account</h1>
