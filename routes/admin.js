@@ -251,7 +251,7 @@ post('/admin/users/:id/role', requireUser, requireStaff, async (ctx) => {
   const isTargetRootEmail = u.email && u.email.toLowerCase().trim() === config.rootAdminEmail;
   if (isTargetRootEmail) {
     const assignedRole = findRoleByName(additionalTitle);
-    if (!assignedRole || assignedRole.systemRole === 'root_admin') {
+    if (!assignedRole) {
       throw httpError(400, 'Select a valid additional role.');
     }
     role = 'root_admin';

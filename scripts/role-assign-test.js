@@ -127,16 +127,19 @@ async function run() {
     assert.ok(consolePage.text.includes('name="title"'), 'Other account selectors keep the normal title field');
     const rootRow = db.prepare("SELECT id FROM users WHERE email = ?").get(config.rootAdminEmail);
     assert.deepStrictEqual(root.roleOptions(consolePage.text, rootRow.id), adm.roleOptions(dashAfter.text, playerId), 'Root and staff selectors have the same complete role list');
+    const rootSelector = consolePage.text.slice(consolePage.text.indexOf(`<select id="role-sel-${rootRow.id}"`));
+    const rootExecutiveOption = rootSelector.slice(0, rootSelector.indexOf('</select>')).match(/<option value="Project Management"([^>]*)>/);
+    assert.ok(rootExecutiveOption && !rootExecutiveOption[1].includes('disabled'), 'Executive roles are selectable for the Root Admin');
     const rootUpdate = await root.post(`/admin/users/${rootRow.id}/role`, {
       _csrf: root.csrf(consolePage.text),
-      additional_title: 'Governor',
+      additional_title: 'Project Management',
     });
     assert.strictEqual(rootUpdate.status, 303, `Root additional-role update redirects: ${rootUpdate.text}`);
     const updatedRoot = db.prepare('SELECT role, staff_title, additional_title FROM users WHERE id = ?').get(rootRow.id);
     assert.strictEqual(updatedRoot.role, 'root_admin');
     assert.strictEqual(updatedRoot.staff_title, 'Project Management');
-    assert.strictEqual(updatedRoot.additional_title, 'Governor');
-    console.log('  ok   Root Admin additional role persists while root access remains intact');
+    assert.strictEqual(updatedRoot.additional_title, 'Project Management');
+    console.log('  ok   Root Admin can select an Executive role while root access remains intact');
 
     const rootAgain = new Client();
     const reloginPage = await rootAgain.get('/login');
@@ -148,7 +151,7 @@ async function run() {
     const account = await rootAgain.get('/account');
     assert.strictEqual(account.status, 200);
     assert.ok(account.text.includes('👑 Root Admin'), 'Account shows the permanent Root Admin tag');
-    assert.ok(account.text.includes('Governor'), 'Account shows the additional assigned role');
+    assert.ok(account.text.includes('Project Management'), 'Account shows the additional assigned role');
     assert.ok(account.text.includes('EN | Player (Permanent)'), 'Account keeps the permanent player tag');
     console.log('  ok   Root Admin account renders all three role tags');
 
