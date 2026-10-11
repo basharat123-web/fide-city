@@ -66,6 +66,14 @@ post('/login', async (ctx) => {
     await syncFromSupabase();
   }
   let user = ident ? q.byName.get(ident, ident) : null;
+  if (!user && config.supabase && config.supabase.enabled) {
+    const { getUserByEmailOrUsername, saveUserLocal } = require('../lib/supabase');
+    const remote = await getUserByEmailOrUsername(ident);
+    if (remote) {
+      saveUserLocal(remote);
+      user = q.byName.get(ident, ident);
+    }
+  }
   const now = Date.now();
   const locked = user && user.locked_until > now;
 
