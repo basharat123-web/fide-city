@@ -57,9 +57,13 @@ CREATE TABLE IF NOT EXISTS threads (
   locked      INT NOT NULL DEFAULT 0,
   deleted     INT NOT NULL DEFAULT 0,
   reply_count INT NOT NULL DEFAULT 0,
+  status      TEXT,
   created_at  BIGINT NOT NULL,
   updated_at  BIGINT NOT NULL
 );
+
+-- Run on existing DBs so forum status/publish labels can be stored:
+ALTER TABLE threads ADD COLUMN IF NOT EXISTS status TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_threads_cat ON threads(category_id, deleted, pinned DESC, updated_at DESC);
 

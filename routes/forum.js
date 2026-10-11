@@ -2,6 +2,7 @@
 const { get, post } = require('../lib/http');
 const { db, tx, audit } = require('../lib/db');
 const sec = require('../lib/security');
+const config = require('../lib/config');
 const view = require('../views/forum');
 const { httpError, requireUser, requireStaff, requireAdmin, isStaff, intParam, pageParam } = require('./helpers');
 const { getPermissions } = require('../lib/roles');
@@ -115,6 +116,19 @@ function visibleThread(ctx, idParam) {
 
 const canStartThread = (ctx, cat) => Boolean(ctx.user) && (!cat.locked || isStaff(ctx.user));
 
+function isApplicationForumCategory(cat) {
+  let current = cat;
+  while (current) {
+    if (current.slug === 'application') return true;
+    current = current.parent_slug ? q.cat.get(current.parent_slug) : null;
+  }
+  return false;
+}
+
+function cloudForum() {
+  return Boolean(config.supabase && config.supabase.enabled);
+}
+
 /** Shared checks for anything a member writes: spacing and duplicate detection. */
 function tooFast(userId) {
   const last = q.lastPostBy.get(userId);
@@ -166,7 +180,7 @@ get('/forum/mark-read', (ctx) => {
 });
 
 /* ----------------------------- Category ------------------------------- */
-get('/forum/:slug', (ctx) => {
+get('/forum/:slug', async (ctx) => {
   const cat = visibleCategory(ctx, ctx.params.slug);
   const staff = isStaff(ctx.user) ? 1 : 0;
 
@@ -186,10 +200,21 @@ get('/forum/:slug', (ctx) => {
   });
 
   const pageNo = pageParam(ctx);
-  const total = q.threadCount.get(cat.id).n;
+  let total;
+  let threads;
+  if (cloudForum() && isApplicationForumCategory(cat)) {
+    const { listForumThreads } = require('../lib/supabase');
+    const remote = await listForumThreads(cat, PER_PAGE_THREADS, (pageNo - 1) * PER_PAGE_THREADS);
+    total = remote.total;
+    threads = remote.threads;
+  } else {
+    total = q.threadCount.get(cat.id).n;
+    const pages = Math.max(1, Math.ceil(total / PER_PAGE_THREADS));
+    const p = Math.min(pageNo, pages);
+    threads = q.threads.all(cat.id, PER_PAGE_THREADS, (p - 1) * PER_PAGE_THREADS);
+  }
   const pages = Math.max(1, Math.ceil(total / PER_PAGE_THREADS));
   const p = Math.min(pageNo, pages);
-  const threads = q.threads.all(cat.id, PER_PAGE_THREADS, (p - 1) * PER_PAGE_THREADS);
 
   let parentCat = null;
   if (cat.parent_slug) {
@@ -232,7 +257,7 @@ get('/forum/:slug/new', requireUser, (ctx) => {
   ctx.html(view.newThread(ctx, { cat }));
 });
 
-post('/forum/:slug/new', requireUser, (ctx) => {
+post('/forum/:slug/new', requireUser, async (ctx) => {
   const cat = visibleCategory(ctx, ctx.params.slug);
   if (!canStartThread(ctx, cat)) throw httpError(403, 'Only staff can start threads in this category.');
 
@@ -255,6 +280,12 @@ post('/forum/:slug/new', requireUser, (ctx) => {
   else if (last && last.body === bodyText) errors.body = 'That looks like a duplicate of your last post.';
   if (Object.keys(errors).length) return ctx.html(view.newThread(ctx, { cat, errors, values }), 400);
 
+  if (cloudForum() && isApplicationForumCategory(cat)) {
+    const { createForumThreadRecord } = require('../lib/supabase');
+    const id = await createForumThreadRecord(cat, ctx.user, title, bodyText, null);
+    return ctx.redirect(`/forum/thread/${id}`);
+  }
+
   const now = Date.now();
   const id = tx(() => {
     const tid = Number(q.insThread.run(cat.id, ctx.user.id, title, now, now).lastInsertRowid);
@@ -272,7 +303,19 @@ post('/forum/:slug/new', requireUser, (ctx) => {
 });
 
 /* ------------------------------- Thread ------------------------------- */
-get('/forum/thread/:id', (ctx) => {
+get('/forum/thread/:id', async (ctx) => {
+  if (cloudForum()) {
+    const { getForumThreadRecord } = require('../lib/supabase');
+    const remote = await getForumThreadRecord(intParam(ctx.params.id), pageParam(ctx), PER_PAGE_POSTS);
+    if (remote) {
+      const allCategories = q.cats.all(isStaff(ctx.user) ? 1 : 0);
+      return ctx.html(view.thread(ctx, {
+        ...remote,
+        canReply: Boolean(ctx.user) && !remote.t.locked,
+        allCategories,
+      }));
+    }
+  }
   const { t, cat } = visibleThread(ctx, ctx.params.id);
   const total = q.postCount.get(t.id).n;
   const pages = Math.max(1, Math.ceil(total / PER_PAGE_POSTS));
@@ -283,7 +326,59 @@ get('/forum/thread/:id', (ctx) => {
   ctx.html(view.thread(ctx, { t: thread, cat, posts, pageNo, pages, canReply: Boolean(ctx.user) && !t.locked, allCategories }));
 });
 
-post('/forum/thread/:id/reply', requireUser, (ctx) => {
+post('/forum/thread/:id/reply', requireUser, async (ctx) => {
+  if (cloudForum()) {
+    const { getForumThreadRecord, createForumReplyRecord } = require('../lib/supabase');
+    const remote = await getForumThreadRecord(intParam(ctx.params.id));
+    if (remote) {
+      if (remote.t.locked) throw httpError(403, 'This thread is locked.');
+      const bodyText = sec.clean(ctx.body.body, 5000);
+      if (!isStaff(ctx.user)) {
+        const rl = replyLimit(String(ctx.user.id));
+        if (!rl.ok) {
+          return ctx.html(view.thread(ctx, {
+            ...remote,
+            canReply: true,
+            allCategories: q.cats.all(0),
+            errors: { body: 'You have replied a lot recently. Try again later.' },
+            draft: bodyText,
+          }), 429);
+        }
+      }
+      if (bodyText.length < 2) {
+        return ctx.html(view.thread(ctx, {
+          ...remote,
+          canReply: true,
+          allCategories: q.cats.all(0),
+          errors: { body: 'Write a reply first.' },
+          draft: bodyText,
+        }), 400);
+      }
+      const last = tooFast(ctx.user.id);
+      if (!isStaff(ctx.user) && last) {
+        return ctx.html(view.thread(ctx, {
+          ...remote,
+          canReply: true,
+          allCategories: q.cats.all(0),
+          errors: { body: 'You are posting too quickly. Wait a few seconds.' },
+          draft: bodyText,
+        }), 400);
+      }
+      if (last && last.body === bodyText) {
+        return ctx.html(view.thread(ctx, {
+          ...remote,
+          canReply: true,
+          allCategories: q.cats.all(0),
+          errors: { body: 'That looks like a duplicate of your last post.' },
+          draft: bodyText,
+        }), 400);
+      }
+      const post = await createForumReplyRecord(remote.t.id, ctx.user, bodyText);
+      const count = remote.total + 1;
+      const lastPage = Math.max(1, Math.ceil(count / PER_PAGE_POSTS));
+      return ctx.redirect(`/forum/thread/${remote.t.id}?page=${lastPage}#post-${post.id}`);
+    }
+  }
   const { t, cat } = visibleThread(ctx, ctx.params.id);
   const allCategories = q.cats.all(isStaff(ctx.user) ? 1 : 0);
   const redo = (errors, draft, status = 400) => {
@@ -316,8 +411,20 @@ post('/forum/thread/:id/reply', requireUser, (ctx) => {
 });
 
 /* ------------------------------- Editing ------------------------------ */
-get('/forum/post/:id/edit', requireUser, requireAdmin, (ctx) => {
+get('/forum/post/:id/edit', requireUser, requireAdmin, async (ctx) => {
   const id = intParam(ctx.params.id);
+  if (cloudForum()) {
+    const { getForumPostRecord } = require('../lib/supabase');
+    const remote = await getForumPostRecord(id);
+    if (remote) {
+      return ctx.html(view.editPost(ctx, {
+        t: remote.thread,
+        cat: remote.cat,
+        post: remote.post,
+        isFirstPost: remote.isFirstPost,
+      }));
+    }
+  }
   const p = id && q.post.get(id);
   if (!p) throw httpError(404, 'Page not found');
   const { t, cat } = visibleThread(ctx, String(p.thread_id));
@@ -325,8 +432,33 @@ get('/forum/post/:id/edit', requireUser, requireAdmin, (ctx) => {
   ctx.html(view.editPost(ctx, { t, cat, post: p, isFirstPost }));
 });
 
-post('/forum/post/:id/edit', requireUser, requireAdmin, (ctx) => {
+post('/forum/post/:id/edit', requireUser, requireAdmin, async (ctx) => {
   const id = intParam(ctx.params.id);
+  if (cloudForum()) {
+    const { getForumPostRecord, updateForumPostRecord } = require('../lib/supabase');
+    const remote = await getForumPostRecord(id);
+    if (remote) {
+      const title = remote.isFirstPost ? sec.cleanLine(ctx.body.title, 120) : remote.thread.title;
+      const body = sec.clean(ctx.body.body, 5000);
+      const errors = {};
+      if (remote.isFirstPost && title.length < 3) errors.title = 'Give your thread a title of at least 3 characters.';
+      if (body.length < (remote.isFirstPost ? 10 : 2)) errors.body = `Write at least ${remote.isFirstPost ? 10 : 2} characters.`;
+      if (Object.keys(errors).length) {
+        return ctx.html(view.editPost(ctx, {
+          t: remote.thread,
+          cat: remote.cat,
+          post: { ...remote.post, body },
+          isFirstPost: remote.isFirstPost,
+          title,
+          errors,
+        }), 400);
+      }
+      await updateForumPostRecord(id, remote.thread.id, body, remote.isFirstPost ? title : null);
+      audit(ctx.user.id, 'forum_post_edit', `post ${id} in thread ${remote.thread.id}`, ctx.ip);
+      ctx.flash('ok', 'Post updated.');
+      return ctx.redirect(`/forum/thread/${remote.thread.id}#post-${id}`);
+    }
+  }
   const p = id && q.post.get(id);
   if (!p) throw httpError(404, 'Page not found');
   const { t, cat } = visibleThread(ctx, String(p.thread_id));
@@ -394,9 +526,25 @@ const ALLOWED_STATUSES = [
   '',
 ];
 
-post('/forum/thread/:id/status', requireUser, requireStaff, (ctx) => {
+post('/forum/thread/:id/status', requireUser, requireStaff, async (ctx) => {
   const perms = getPermissions(ctx.user);
   if (!perms.canTagStatus) throw httpError(403, 'You do not have permission to update thread status tags.');
+  if (cloudForum()) {
+    const { getForumThreadRecord, updateForumThreadRecord } = require('../lib/supabase');
+    const remote = await getForumThreadRecord(intParam(ctx.params.id));
+    if (remote) {
+      const rawStatus = sec.cleanLine(ctx.body.status, 30);
+      if (!ALLOWED_STATUSES.includes(rawStatus)) throw httpError(400, 'Invalid status.');
+      const val = rawStatus || null;
+      await updateForumThreadRecord(remote.t.id, { status: val });
+      audit(ctx.user.id, 'thread_status_tag', `thread ${remote.t.id} status set to ${val || 'None'}`, ctx.ip);
+      const isAjax = ctx.req.headers['x-requested-with'] === 'XMLHttpRequest' ||
+        (ctx.req.headers['accept'] && ctx.req.headers['accept'].includes('application/json'));
+      if (isAjax) return ctx.json({ ok: true, status: val });
+      ctx.flash('ok', val ? `Thread status updated to: ${val}.` : 'Thread status tag cleared.');
+      return ctx.redirect(`/forum/thread/${remote.t.id}`);
+    }
+  }
   const { t } = visibleThread(ctx, ctx.params.id);
   const rawStatus = sec.cleanLine(ctx.body.status, 30);
   if (!ALLOWED_STATUSES.includes(rawStatus)) throw httpError(400, 'Invalid status.');
@@ -419,9 +567,19 @@ get('/forum/thread/:id/status-check', (ctx) => {
   ctx.json({ ok: true, status: t.status || '' });
 });
 
-post('/forum/thread/:id/delete', requireUser, requireStaff, (ctx) => {
+post('/forum/thread/:id/delete', requireUser, requireStaff, async (ctx) => {
   const perms = getPermissions(ctx.user);
   if (!perms.canDelete) throw httpError(403, 'You do not have permission to delete threads.');
+  if (cloudForum()) {
+    const { getForumThreadRecord, deleteForumThreadRecord } = require('../lib/supabase');
+    const remote = await getForumThreadRecord(intParam(ctx.params.id));
+    if (remote) {
+      await deleteForumThreadRecord(remote.t.id);
+      audit(ctx.user.id, 'thread_delete', `thread ${remote.t.id}: ${remote.t.title}`, ctx.ip);
+      ctx.flash('ok', 'Thread deleted.');
+      return ctx.redirect(`/forum/${remote.cat.slug}`);
+    }
+  }
   const { t, cat } = visibleThread(ctx, ctx.params.id);
   q.delThread.run(t.id);
   audit(ctx.user.id, 'thread_delete', `thread ${t.id}: ${t.title}`, ctx.ip);
@@ -429,10 +587,21 @@ post('/forum/thread/:id/delete', requireUser, requireStaff, (ctx) => {
   ctx.redirect(`/forum/${cat.slug}`);
 });
 
-post('/forum/post/:id/delete', requireUser, requireStaff, (ctx) => {
+post('/forum/post/:id/delete', requireUser, requireStaff, async (ctx) => {
   const perms = getPermissions(ctx.user);
   if (!perms.canDeletePost) throw httpError(403, 'You do not have permission to delete replies.');
   const id = intParam(ctx.params.id);
+  if (cloudForum()) {
+    const { getForumPostRecord, deleteForumPostRecord } = require('../lib/supabase');
+    const remote = await getForumPostRecord(id);
+    if (remote) {
+      if (remote.isFirstPost) throw httpError(400, 'Delete the thread instead of its first post.');
+      await deleteForumPostRecord(id, remote.thread.id);
+      audit(ctx.user.id, 'post_delete', `post ${id} in thread ${remote.thread.id}`, ctx.ip);
+      ctx.flash('ok', 'Reply deleted.');
+      return ctx.redirect(`/forum/thread/${remote.thread.id}`);
+    }
+  }
   const p = id && q.post.get(id);
   if (!p) throw httpError(404, 'Page not found');
   const t = q.thread.get(p.thread_id);
