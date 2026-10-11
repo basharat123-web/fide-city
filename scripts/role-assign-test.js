@@ -3,7 +3,7 @@ const http = require('node:http');
 const os = require('node:os');
 const fs = require('node:fs');
 const path = require('node:path');
-const { spawn } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
 const assert = require('node:assert');
 
 const PORT = 3800 + Math.floor(Math.random() * 200);
@@ -56,7 +56,47 @@ class Client {
   }
 }
 
+function testSupabaseRolePersistence() {
+  const supabaseModule = path.join(__dirname, '..', 'lib', 'supabase.js');
+  const script = `
+    const assert = require('node:assert/strict');
+    const { supabase, updateUserRole } = require(${JSON.stringify(supabaseModule)});
+    const updates = [];
+    supabase.from = () => ({
+      update(payload) {
+        updates.push(payload);
+        return { eq: async () => ({ error: null }) };
+      },
+    });
+    (async () => {
+      await updateUserRole(7, 'admin', 'Project Management', 'pm@example.test', 'EN | Player');
+      await updateUserRole(8, 'root_admin', 'Project Management', 'stale-root@example.test', 'EN | Player');
+      assert.equal(updates[0].role, 'admin');
+      assert.equal(updates[0].staff_title, 'Project Management');
+      assert.equal(updates[1].role, 'admin');
+      assert.equal(updates[1].staff_title, 'Chief Administrator');
+    })().catch((error) => {
+      console.error(error);
+      process.exitCode = 1;
+    });
+  `;
+  const result = spawnSync(process.execPath, ['-e', script], {
+    cwd: path.join(__dirname, '..'),
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      DB_PATH: path.join(TMP, 'supabase-role-test.db'),
+      ROOT_ADMIN_EMAIL: 'rootboss@example.test',
+      SUPABASE_URL: 'https://example.supabase.co',
+      SUPABASE_KEY: 'test-only-key',
+    },
+  });
+  assert.strictEqual(result.status, 0, `Supabase role persistence rules: ${result.stderr || result.stdout}`);
+  console.log('  ok   Supabase preserves delegated Project Management and clamps stale root roles');
+}
+
 async function run() {
+  testSupabaseRolePersistence();
   const adminHash = await sec.hashPassword('Pass-12345!');
   const userHash = await sec.hashPassword('Pass-12345!');
   const chief = db.prepare("INSERT INTO users (username, email, password_hash, role, staff_title, created_at) VALUES ('chief_admin', 'chief@fidecity.com', ?, 'admin', 'Chief Administrator', ?)").run(adminHash, Date.now());
