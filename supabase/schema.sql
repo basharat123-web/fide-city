@@ -124,13 +124,12 @@ INSERT INTO categories (slug, name, description, sort_order, staff_only, locked)
 VALUES
   ('announcements', 'Announcements', 'Official news, updates and server changes from the team.', 1, 0, 1),
   ('general', 'General discussion', 'Talk about the city, share clips and meet other players.', 2, 0, 0),
-  ('new-players', 'New players', 'Questions about getting started, characters and how roleplay works.', 3, 0, 0),
   ('support', 'Technical support', 'Crashes, connection problems and bugs. Say what you already tried.', 4, 0, 0),
-  ('reports', 'Player reports', 'Report rule-breaking with a clip or screenshot. Keep it factual.', 5, 0, 0),
-  ('organizations', 'Organizations and jobs', 'Hiring posts, applications and department news.', 6, 0, 0),
   ('suggestions', 'Suggestions', 'Pitch features, scripts and rule changes for the city.', 7, 0, 0),
   ('staff', 'Staff room', 'Private. Only moderators, admins and root admin can see this.', 99, 1, 0)
 ON CONFLICT (slug) DO NOTHING;
+
+DELETE FROM categories WHERE slug IN ('new-players', 'reports', 'organizations');
 
 -- ====================================================================
 -- Helper query to promote any account to ROOT ADMIN:

@@ -14,7 +14,7 @@ module.exports = {
     },
     {
       title: 'Help when you start',
-      text: 'New to roleplay? Ask in the new players forum or on Discord and a helper will walk you through your first night.',
+      text: 'New to roleplay? Ask on Discord and a helper will walk you through your first night.',
     },
     {
       title: 'Staff who keep it fair',
@@ -91,7 +91,7 @@ module.exports = {
     },
     {
       q: 'Do I need roleplay experience?',
-      a: 'No. Everyone starts somewhere. Read the rules, ask questions in the new players forum or on Discord and take your time.',
+      a: 'No. Everyone starts somewhere. Read the rules, ask questions on Discord and take your time.',
     },
     {
       q: 'What PC do I need?',
@@ -99,11 +99,11 @@ module.exports = {
     },
     {
       q: 'How do I report a rule-breaker?',
-      a: 'Post in the Support and reports forum with the date, time, player names and a clip or screenshot. You can also open a ticket on Discord.',
+      a: 'Open a ticket on Discord with the date, time, player names and a clip or screenshot. Keep it factual.',
     },
     {
       q: 'Can I bring my own character backstory?',
-      a: 'Yes, and we encourage it. Keep it realistic for Los Santos and share it in the Character stories forum if you like.',
+      a: 'Yes, and we encourage it. Keep it realistic for Los Santos and share it in the English Server forum if you like.',
     },
     {
       q: 'How do I join the police, EMS or other departments?',
@@ -149,7 +149,7 @@ module.exports = {
     {
       title: 'Reporting and enforcement',
       items: [
-        'Report issues in the Support and reports forum or via a Discord ticket. Include date, time, names and a clip when you can.',
+        'Report issues via a Discord ticket or technical support forum. Include date, time, names and a clip when you can.',
         'Staff may warn, mute, kick, suspend or ban depending on how serious the breach is and your history.',
         'Staff decisions can be appealed once. False reports and harassing staff will count against you.',
         'These rules can change. It is your responsibility to read the announcements.',
