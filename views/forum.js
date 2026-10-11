@@ -63,10 +63,16 @@ function threadStatusBadge(status) {
   if (lower === 'approved' || lower === '[approved]') {
     return html`<span class="forum-tag tag-approved">Approved</span>`;
   }
-  if (lower === 'rejected') {
+  if (lower === 'rejected' || lower === '[rejected]') {
     return html`<span class="forum-tag tag-rejected">Rejected</span>`;
   }
-  if (lower === 'pending review' || lower === 'pending') {
+  if (lower === 'reviewed' || lower === '[reviewed]') {
+    return html`<span class="forum-tag tag-reviewed">Reviewed</span>`;
+  }
+  if (lower === 'on consideration' || lower === 'consideration' || lower === '[on consideration]') {
+    return html`<span class="forum-tag tag-consideration">On Consideration</span>`;
+  }
+  if (lower === 'pending review' || lower === 'pending' || lower === '[pending review]') {
     return html`<span class="forum-tag tag-pending">Pending Review</span>`;
   }
   if (lower.includes('state organization')) {
@@ -388,7 +394,30 @@ function thread(ctx, { t, cat, posts, pageNo, pages, canReply, allCategories = [
     ${crumbs([{ label: 'Forum', href: '/forum' }, { label: cat.name, href: `/forum/${cat.slug}` }, { label: t.title }])}
     <div class="page-head">
       <div>
-        <h1 class="page-title thread-title">${threadStatusBadge(t.status)}${t.title}</h1>
+        <h1 class="page-title thread-title">
+          ${perms.canTagStatus
+            ? html`
+              <span class="thread-prefix-ctrl" id="thread-prefix-ctrl" data-thread-id="${t.id}" data-csrf="${ctx.csrfToken()}">
+                <button type="button" class="btn-prefix-badge-toggle" id="btn-prefix-badge-toggle" aria-haspopup="true" aria-expanded="false" title="Click to change status prefix">
+                  <span id="thread-title-badge">${t.status ? threadStatusBadge(t.status) : html`<span class="tag-no-prefix">(No prefix)</span>`}</span>
+                  <span class="prefix-caret">▾</span>
+                </button>
+                <div class="prefix-dropdown-card" id="prefix-dropdown-card" style="display: none;" role="menu">
+                  <button type="button" class="prefix-card-btn btn-prefix-important" data-status="IMPORTANT" role="menuitem">IMPORTANT</button>
+                  <button type="button" class="prefix-card-btn btn-prefix-approved" data-status="Approved" role="menuitem">Approved</button>
+                  <button type="button" class="prefix-card-btn btn-prefix-rejected" data-status="Rejected" role="menuitem">Rejected</button>
+                  <button type="button" class="prefix-card-btn btn-prefix-reviewed" data-status="Reviewed" role="menuitem">Reviewed</button>
+                  <button type="button" class="prefix-card-btn btn-prefix-consideration" data-status="On Consideration" role="menuitem">On Consideration</button>
+                  <button type="button" class="prefix-card-btn btn-prefix-pending" data-status="Pending Review" role="menuitem">Pending Review</button>
+                  <div class="prefix-card-divider"></div>
+                  <button type="button" class="prefix-card-btn btn-prefix-none" data-status="" role="menuitem">(No prefix)</button>
+                </div>
+              </span>
+            `
+            : html`<span id="thread-title-badge">${threadStatusBadge(t.status)}</span>`
+          }
+          <span class="thread-title-text" id="thread-title-text">${t.title}</span>
+        </h1>
         <p class="muted">${t.pinned ? html`<span class="badge">Pinned</span> ` : ''}${t.locked ? html`<span class="badge badge-quiet">Locked</span> ` : ''}${t.reply_count} ${t.reply_count === 1 ? 'reply' : 'replies'}</p>
       </div>
       ${perms.canPin || perms.canLock || perms.canDelete || perms.canTagStatus || perms.canMove
@@ -396,13 +425,16 @@ function thread(ctx, { t, cat, posts, pageNo, pages, canReply, allCategories = [
             ${perms.canPin ? html`<form method="post" action="/forum/thread/${t.id}/pin">${csrfField(ctx)}<button class="btn btn-ghost btn-sm" type="submit">${t.pinned ? 'Unpin' : 'Pin'}</button></form>` : ''}
             ${perms.canLock ? html`<form method="post" action="/forum/thread/${t.id}/lock">${csrfField(ctx)}<button class="btn btn-ghost btn-sm" type="submit">${t.locked ? 'Unlock' : 'Lock'}</button></form>` : ''}
             ${perms.canDelete ? html`<form method="post" action="/forum/thread/${t.id}/delete" data-confirm="Delete this thread and all its replies?">${csrfField(ctx)}<button class="btn btn-danger btn-sm" type="submit">Delete thread</button></form>` : ''}
-            ${perms.canTagStatus ? html`<form method="post" action="/forum/thread/${t.id}/status" style="display:inline-block; margin:0;">${csrfField(ctx)}
-                <select name="status" onchange="this.form.submit()" style="padding: 0.35rem 0.6rem; border-radius: 6px; font-size: 0.8rem; background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: #fff; cursor: pointer;">
-                  <option value=""${!t.status ? ' selected' : ''}>🏷️ Set Tag...</option>
+            ${perms.canTagStatus ? html`<form method="post" action="/forum/thread/${t.id}/status" style="display:inline-block; margin:0;" class="status-mod-form">${csrfField(ctx)}
+                <select name="status" class="status-mod-select" onchange="this.form.submit()" style="padding: 0.35rem 0.6rem; border-radius: 6px; font-size: 0.8rem; background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: #fff; cursor: pointer;">
+                  <option value=""${!t.status ? ' selected' : ''}>🏷️ Prefix...</option>
+                  <option value="IMPORTANT"${t.status === 'IMPORTANT' ? ' selected' : ''}>🔴 IMPORTANT</option>
                   <option value="Approved"${t.status === 'Approved' ? ' selected' : ''}>✅ Approved</option>
                   <option value="Rejected"${t.status === 'Rejected' ? ' selected' : ''}>❌ Rejected</option>
-                  <option value="Pending Review"${t.status === 'Pending Review' ? ' selected' : ''}>⏳ Pending Review</option>
-                  ${t.status ? html`<option value="">✕ Clear Status</option>` : ''}
+                  <option value="Reviewed"${t.status === 'Reviewed' ? ' selected' : ''}>📋 Reviewed</option>
+                  <option value="On Consideration"${t.status === 'On Consideration' ? ' selected' : ''}>⏳ On Consideration</option>
+                  <option value="Pending Review"${t.status === 'Pending Review' ? ' selected' : ''}>⚠️ Pending Review</option>
+                  ${t.status ? html`<option value="">✕ (No prefix)</option>` : ''}
                 </select>
               </form>` : ''}
             ${perms.canMove && allCategories && allCategories.length ? html`<form method="post" action="/forum/thread/${t.id}/move" style="display:inline-block; margin:0;">${csrfField(ctx)}
@@ -458,6 +490,7 @@ function thread(ctx, { t, cat, posts, pageNo, pages, canReply, allCategories = [
 
 /* ---------------------------- New thread ----------------------------- */
 function newThread(ctx, { cat, errors = {}, values = {} }) {
+  const perms = getPermissions(ctx.user);
   const body = html`<div class="wrap prose-wrap">
     ${crumbs([{ label: 'Forum', href: '/forum' }, { label: cat.name, href: `/forum/${cat.slug}` }, { label: 'New thread' }])}
     <h1 class="page-title">New thread in ${cat.name}</h1>
@@ -466,7 +499,28 @@ function newThread(ctx, { cat, errors = {}, values = {} }) {
       ${csrfField(ctx)}
       <div class="field${errors.title ? ' has-error' : ''}">
         <label for="title">Title</label>
-        <input id="title" name="title" type="text" maxlength="120" required value="${values.title || ''}">
+        <div class="new-thread-title-row">
+          ${perms.canTagStatus ? html`
+            <div class="new-thread-prefix-wrap" id="new-thread-prefix-wrap">
+              <input type="hidden" name="status" id="new-thread-status-input" value="${values.status || ''}">
+              <button type="button" class="btn-prefix-badge-toggle" id="btn-new-thread-prefix" aria-haspopup="true" aria-expanded="false" title="Click to choose prefix">
+                <span id="new-thread-prefix-display">${values.status ? threadStatusBadge(values.status) : html`<span class="tag-no-prefix">(No prefix)</span>`}</span>
+                <span class="prefix-caret">▾</span>
+              </button>
+              <div class="prefix-dropdown-card" id="new-thread-prefix-card" style="display: none;" role="menu">
+                <button type="button" class="prefix-card-btn btn-prefix-important" data-new-status="IMPORTANT">IMPORTANT</button>
+                <button type="button" class="prefix-card-btn btn-prefix-approved" data-new-status="Approved">Approved</button>
+                <button type="button" class="prefix-card-btn btn-prefix-rejected" data-new-status="Rejected">Rejected</button>
+                <button type="button" class="prefix-card-btn btn-prefix-reviewed" data-new-status="Reviewed">Reviewed</button>
+                <button type="button" class="prefix-card-btn btn-prefix-consideration" data-new-status="On Consideration">On Consideration</button>
+                <button type="button" class="prefix-card-btn btn-prefix-pending" data-new-status="Pending Review">Pending Review</button>
+                <div class="prefix-card-divider"></div>
+                <button type="button" class="prefix-card-btn btn-prefix-none" data-new-status="">(No prefix)</button>
+              </div>
+            </div>
+          ` : ''}
+          <input id="title" name="title" type="text" maxlength="120" required value="${values.title || ''}" placeholder="Thread title">
+        </div>
         ${errors.title ? html`<p class="form-error" role="alert">${errors.title}</p>` : ''}
       </div>
       <div class="field${errors.body ? ' has-error' : ''}">

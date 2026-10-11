@@ -172,6 +172,13 @@ post('/forum/:slug/new', requireUser, (ctx) => {
   const id = tx(() => {
     const tid = Number(q.insThread.run(cat.id, ctx.user.id, title, now, now).lastInsertRowid);
     q.insPost.run(tid, ctx.user.id, bodyText, now);
+    const perms = getPermissions(ctx.user);
+    if (perms.canTagStatus && ctx.body.status) {
+      const rawStatus = sec.cleanLine(ctx.body.status, 30);
+      if (ALLOWED_STATUSES.includes(rawStatus) && rawStatus) {
+        db.prepare('UPDATE threads SET status = ? WHERE id = ?').run(rawStatus, tid);
+      }
+    }
     return tid;
   });
   ctx.redirect(`/forum/thread/${id}`);
@@ -253,18 +260,39 @@ post('/forum/thread/:id/move', requireUser, requireStaff, (ctx) => {
   ctx.redirect(`/forum/thread/${t.id}`);
 });
 
+const ALLOWED_STATUSES = [
+  'IMPORTANT',
+  'Approved',
+  'Rejected',
+  'Reviewed',
+  'On Consideration',
+  'Pending Review',
+  '',
+];
+
 post('/forum/thread/:id/status', requireUser, requireStaff, (ctx) => {
   const perms = getPermissions(ctx.user);
   if (!perms.canTagStatus) throw httpError(403, 'You do not have permission to update thread status tags.');
   const { t } = visibleThread(ctx, ctx.params.id);
   const rawStatus = sec.cleanLine(ctx.body.status, 30);
-  const allowed = ['Approved', 'Rejected', 'Pending Review', ''];
-  if (!allowed.includes(rawStatus)) throw httpError(400, 'Invalid status.');
+  if (!ALLOWED_STATUSES.includes(rawStatus)) throw httpError(400, 'Invalid status.');
   const val = rawStatus || null;
   db.prepare('UPDATE threads SET status = ? WHERE id = ?').run(val, t.id);
   audit(ctx.user.id, 'thread_status_tag', `thread ${t.id} status set to ${val || 'None'}`, ctx.ip);
+
+  const isAjax = ctx.req.headers['x-requested-with'] === 'XMLHttpRequest' ||
+                 (ctx.req.headers['accept'] && ctx.req.headers['accept'].includes('application/json'));
+  if (isAjax) {
+    return ctx.json({ ok: true, status: val });
+  }
+
   ctx.flash('ok', val ? `Thread status updated to: ${val}.` : 'Thread status tag cleared.');
   ctx.redirect(`/forum/thread/${t.id}`);
+});
+
+get('/forum/thread/:id/status-check', (ctx) => {
+  const { t } = visibleThread(ctx, ctx.params.id);
+  ctx.json({ ok: true, status: t.status || '' });
 });
 
 post('/forum/thread/:id/delete', requireUser, requireStaff, (ctx) => {

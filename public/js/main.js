@@ -368,4 +368,160 @@
       });
     }
   });
+
+  /* ---------------------------------------------------------
+     Real-Time Forum Prefix & Status System (Grand RP Style)
+     --------------------------------------------------------- */
+  function renderPrefixBadgeHtml(status) {
+    if (!status) return '<span class="tag-no-prefix">(No prefix)</span>';
+    var s = String(status).trim();
+    var lower = s.toLowerCase();
+    if (lower === 'important') return '<span class="forum-tag tag-important">IMPORTANT</span>';
+    if (lower === 'approved') return '<span class="forum-tag tag-approved">Approved</span>';
+    if (lower === 'rejected') return '<span class="forum-tag tag-rejected">Rejected</span>';
+    if (lower === 'reviewed') return '<span class="forum-tag tag-reviewed">Reviewed</span>';
+    if (lower === 'on consideration' || lower === 'consideration') return '<span class="forum-tag tag-consideration">On Consideration</span>';
+    if (lower === 'pending review' || lower === 'pending') return '<span class="forum-tag tag-pending">Pending Review</span>';
+    return '<span class="forum-tag tag-default">' + s + '</span>';
+  }
+
+  function showPrefixToast(msg, isError) {
+    var oldToast = document.querySelector('.fc-prefix-toast');
+    if (oldToast) oldToast.remove();
+    var t = document.createElement('div');
+    t.className = 'fc-prefix-toast' + (isError ? ' is-error' : '');
+    t.innerHTML = (isError ? '⚠️ ' : '✅ ') + msg;
+    document.body.appendChild(t);
+    setTimeout(function () {
+      t.style.opacity = '0';
+      setTimeout(function () { t.remove(); }, 350);
+    }, 2800);
+  }
+
+  // Handle prefix button click on thread page and new thread view
+  document.addEventListener('click', function (e) {
+    var prefixToggle = e.target.closest('#btn-prefix-badge-toggle');
+    var prefixCard = document.getElementById('prefix-dropdown-card');
+    if (prefixToggle && prefixCard) {
+      e.stopPropagation();
+      var isShown = prefixCard.style.display !== 'none';
+      prefixCard.style.display = isShown ? 'none' : 'block';
+      prefixToggle.setAttribute('aria-expanded', isShown ? 'false' : 'true');
+      return;
+    }
+
+    var prefixOpt = e.target.closest('#prefix-dropdown-card .prefix-card-btn');
+    if (prefixOpt) {
+      e.preventDefault();
+      var ctrl = document.getElementById('thread-prefix-ctrl');
+      if (!ctrl) return;
+      var threadId = ctrl.getAttribute('data-thread-id');
+      var csrf = ctrl.getAttribute('data-csrf');
+      var newStatus = prefixOpt.getAttribute('data-status') || '';
+      var titleBadge = document.getElementById('thread-title-badge');
+
+      if (prefixCard) prefixCard.style.display = 'none';
+      if (prefixToggle) prefixToggle.setAttribute('aria-expanded', 'false');
+
+      // Instant optimistic UI update (real-time zero lag)
+      if (titleBadge) {
+        titleBadge.innerHTML = renderPrefixBadgeHtml(newStatus);
+      }
+
+      // Sync moderation select if present
+      var modSelect = document.querySelector('.status-mod-select');
+      if (modSelect) {
+        modSelect.value = newStatus;
+      }
+
+      // Send async request to persist
+      fetch('/forum/thread/' + encodeURIComponent(threadId) + '/status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-Requested-With': 'XMLHttpRequest',
+          'Accept': 'application/json',
+        },
+        body: new URLSearchParams({ _csrf: csrf, status: newStatus }).toString(),
+      })
+        .then(function (res) {
+          if (!res.ok) throw new Error('Status update failed');
+          return res.json().catch(function () { return { ok: true }; });
+        })
+        .then(function () {
+          showPrefixToast(newStatus ? 'Prefix updated to ' + newStatus : 'Prefix removed', false);
+        })
+        .catch(function (err) {
+          showPrefixToast('Error saving prefix: ' + (err.message || 'Network error'), true);
+        });
+      return;
+    }
+
+    // Close thread prefix menu if clicked outside
+    if (prefixCard && prefixCard.style.display !== 'none' && !e.target.closest('#thread-prefix-ctrl')) {
+      prefixCard.style.display = 'none';
+      var pToggle = document.getElementById('btn-prefix-badge-toggle');
+      if (pToggle) pToggle.setAttribute('aria-expanded', 'false');
+    }
+
+    // New thread prefix selector
+    var newThreadToggle = e.target.closest('#btn-new-thread-prefix');
+    var newThreadCard = document.getElementById('new-thread-prefix-card');
+    if (newThreadToggle && newThreadCard) {
+      e.stopPropagation();
+      var isNewShown = newThreadCard.style.display !== 'none';
+      newThreadCard.style.display = isNewShown ? 'none' : 'block';
+      newThreadToggle.setAttribute('aria-expanded', isNewShown ? 'false' : 'true');
+      return;
+    }
+
+    var newThreadOpt = e.target.closest('#new-thread-prefix-card .prefix-card-btn');
+    if (newThreadOpt) {
+      e.preventDefault();
+      var chosen = newThreadOpt.getAttribute('data-new-status') || '';
+      var hiddenInput = document.getElementById('new-thread-status-input');
+      var displaySpan = document.getElementById('new-thread-prefix-display');
+      if (hiddenInput) hiddenInput.value = chosen;
+      if (displaySpan) displaySpan.innerHTML = renderPrefixBadgeHtml(chosen);
+      if (newThreadCard) newThreadCard.style.display = 'none';
+      if (newThreadToggle) newThreadToggle.setAttribute('aria-expanded', 'false');
+      return;
+    }
+
+    // Close new thread prefix card if clicked outside
+    if (newThreadCard && newThreadCard.style.display !== 'none' && !e.target.closest('#new-thread-prefix-wrap')) {
+      newThreadCard.style.display = 'none';
+      if (newThreadToggle) newThreadToggle.setAttribute('aria-expanded', 'false');
+    }
+  });
+
+  // Background real-time polling: Keep status live if multiple admins are viewing thread
+  var threadCtrl = document.getElementById('thread-prefix-ctrl');
+  if (threadCtrl) {
+    var tId = threadCtrl.getAttribute('data-thread-id');
+    if (tId) {
+      setInterval(function () {
+        if (document.hidden) return;
+        fetch('/forum/thread/' + encodeURIComponent(tId) + '/status-check', {
+          headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data && data.ok) {
+              var badge = document.getElementById('thread-title-badge');
+              if (badge) {
+                var currentHtml = badge.innerHTML;
+                var updatedHtml = renderPrefixBadgeHtml(data.status);
+                var pCard = document.getElementById('prefix-dropdown-card');
+                var isMenuOpen = pCard && pCard.style.display !== 'none';
+                if (currentHtml !== updatedHtml && !isMenuOpen) {
+                  badge.innerHTML = updatedHtml;
+                }
+              }
+            }
+          })
+          .catch(function () {});
+      }, 10000);
+    }
+  }
 })();

@@ -111,11 +111,11 @@ const pSrv = getPermissions(srv);
 assert.strictEqual(pSrv.canPin, false);
 assert.strictEqual(pSrv.canLock, true);
 assert.strictEqual(pSrv.canMove, true, 'Server Admin can lock and move assigned');
-assert.strictEqual(pSrv.canTagStatus, false);
+assert.strictEqual(pSrv.canTagStatus, true, 'Server Admin can edit prefix');
 assert.strictEqual(pSrv.canBan, false);
 assert.strictEqual(pSrv.canWarn, false, 'Server Admin is report only');
 assert.strictEqual(pSrv.hasAdminPanel, false, 'Server Admin has No ACP Access');
-console.log('  ok   Server Administrator matches Level 5 spec (No ACP Access)');
+console.log('  ok   Server Administrator matches Level 5 spec (Prefix enabled, No ACP Access)');
 
 // 8. Junior Administrator (Field Staff Level 5)
 const jnr = { email: 'junior@fidecity.com', role: 'mod', staff_title: 'Junior Administrator' };
@@ -124,17 +124,31 @@ assert.strictEqual(pJnr.canPin, false);
 assert.strictEqual(pJnr.canLock, false, 'Junior Admin cannot lock');
 assert.strictEqual(pJnr.canDelete, false);
 assert.strictEqual(pJnr.canMove, false);
-assert.strictEqual(pJnr.canTagStatus, false);
+assert.strictEqual(pJnr.canTagStatus, true, 'Junior Admin can edit prefix');
 assert.strictEqual(pJnr.canBan, false);
 assert.strictEqual(pJnr.canWarn, false);
 assert.strictEqual(pJnr.hasAdminPanel, false, 'Junior Admin has No ACP Access');
-console.log('  ok   Junior Administrator matches Level 5 spec (Reply only, No ACP)');
+console.log('  ok   Junior Administrator matches Level 5 spec (Reply and Prefix enabled, No ACP)');
 
-// 9. Role Clamping for unauthorized users
+// 9. Explicitly Excluded Staff Roles from Picture 2 (Community Manager, Discord Mod, PC Checker)
+const cm = { email: 'cm@fidecity.com', role: 'admin', staff_title: 'Community Manager' };
+const pCm = getPermissions(cm);
+assert.strictEqual(pCm.canTagStatus, false, 'Community Manager cannot edit prefix');
+
+const dmod = { email: 'dmod@fidecity.com', role: 'mod', staff_title: 'Discord Moderator' };
+const pDmod = getPermissions(dmod);
+assert.strictEqual(pDmod.canTagStatus, false, 'Discord Moderator cannot edit prefix');
+
+const pcc = { email: 'pcc@fidecity.com', role: 'mod', staff_title: 'PC Checker' };
+const pPcc = getPermissions(pcc);
+assert.strictEqual(pPcc.canTagStatus, false, 'PC Checker cannot edit prefix');
+console.log('  ok   Excluded roles (Community Manager, Discord Mod, PC Checker) verified blocked');
+
+// 10. Role Clamping for unauthorized users
 const fakeRoot = { email: 'hacker@example.com', role: 'admin', staff_title: 'Project Management' };
 const metaFake = getRoleMeta(fakeRoot);
 assert.strictEqual(metaFake.name, 'Chief Administrator');
 assert.strictEqual(metaFake.systemRole, 'admin');
 console.log('  ok   Non-root user clamped from claiming Executive titles');
 
-console.log('\nAll 9 Permission Matrix Level checks PASSED successfully!');
+console.log('\nAll Permission Matrix Level checks PASSED successfully!');
