@@ -15,6 +15,7 @@ process.env.NODE_ENV = 'development';
 
 const sec = require('../lib/security');
 const { db } = require('../lib/db');
+const config = require('../lib/config');
 
 let passed = 0;
 let failed = 0;
@@ -64,6 +65,8 @@ async function main() {
   db.prepare("INSERT INTO users (username, email, password_hash, role, staff_title, created_at) VALUES ('boss', 'boss@example.com', ?, 'admin', 'Chief Administrator', ?)").run(adminHash, Date.now());
   const modHash = await sec.hashPassword('Correct-Horse-Battery-9');
   db.prepare("INSERT INTO users (username, email, password_hash, role, staff_title, created_at) VALUES ('moderator', 'moderator@example.com', ?, 'mod', 'Assistant Administrator', ?)").run(modHash, Date.now());
+  const rootHash = await sec.hashPassword('Correct-Horse-Battery-9');
+  db.prepare("INSERT INTO users (username, email, password_hash, role, staff_title, created_at) VALUES ('rootboss', ?, ?, 'root_admin', 'Project Management', ?)").run(config.rootAdminEmail, rootHash, Date.now());
 
   const server = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', path.join(__dirname, '..', 'server.js')], { env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = '';
@@ -88,6 +91,8 @@ async function main() {
     check('no X-Powered-By', !h['x-powered-by']);
     check('no inline script or style attribute in home HTML', !/<script(?![^>]*src=)/i.test(home.text) && !/\sstyle="/i.test(home.text));
     check('logo is on the page', home.text.includes('/img/logo-640.webp'));
+    const forumHome = await anon.get('/forum');
+    check('forum home links to publicly viewable applications', forumHome.status === 200 && forumHome.text.includes('href="/forum/application"'));
 
     console.log('\nRequest hardening');
     const spoof = await anon.get('/', { host: 'evil.example' });
@@ -170,6 +175,18 @@ async function main() {
     check('moderator login works', modSignedIn.status === 303);
     const modEdit = await mod.get(`/forum/post/${firstPostId}/edit`);
     check('moderators cannot open post editor', modEdit.status === 404);
+    const appForm = await mod.get('/forum/admin-application/new');
+    const appCreated = await mod.post('/forum/admin-application/new', {
+      _csrf: mod.csrf(appForm.text),
+      title: 'Public admin application form',
+      body: 'This submitted application should be viewable by all visitors.',
+    });
+    check('moderator can submit an application form', appCreated.status === 303);
+    const publicGuest = new Client();
+    const appBoard = await publicGuest.get('/forum/application');
+    check('guests can see application sub-forums', appBoard.status === 200 && appBoard.text.includes('Admin Application'));
+    const publicApp = await publicGuest.get(appCreated.headers.location);
+    check('guests can view submitted application forms', publicApp.status === 200 && publicApp.text.includes('This submitted application should be viewable by all visitors.'));
     const lockedCat = await player.get('/forum/announcements/new');
     check('members cannot start threads in staff-only category', lockedCat.status === 403);
     const staffRoom = await player.get('/forum/staff');
@@ -230,6 +247,29 @@ async function main() {
       check('published news is listed and escaped', news.text.includes('Grand opening &lt;3'));
       const audit = await adm.get('/admin?tab=audit');
       check('security log records bans and logins', /user_ban/.test(audit.text) && /login/.test(audit.text));
+
+      const root = new Client();
+      const rootLoginPage = await root.get('/login');
+      const rootLogin = await root.post('/login', {
+        _csrf: root.csrf(rootLoginPage.text),
+        username: 'rootboss',
+        password: 'Correct-Horse-Battery-9',
+      });
+      check('root admin login works', rootLogin.status === 303);
+      const appThread = await root.get(appCreated.headers.location);
+      const rootReply = await root.post(`${appCreated.headers.location}/reply`, {
+        _csrf: root.csrf(appThread.text),
+        body: 'Root admin reviewed this application.',
+      });
+      check('root admin reply redirects successfully', rootReply.status === 303 && /#post-\d+$/.test(rootReply.headers.location || ''));
+      const replyVisible = await publicGuest.get(appCreated.headers.location);
+      check('root admin reply appears publicly without an error page', replyVisible.status === 200 && replyVisible.text.includes('Root admin reviewed this application.'));
+      const setLive = await root.post(`${appCreated.headers.location}/status`, {
+        _csrf: root.csrf(appThread.text),
+        status: 'Approved',
+      });
+      const liveApp = await publicGuest.get(appCreated.headers.location);
+      check('root admin can mark application live for public viewing', setLive.status === 303 && liveApp.status === 200 && liveApp.text.includes('Approved'));
 
       console.log('\nAvatar and Profile Picture');
       const acc = await adm.get('/account');

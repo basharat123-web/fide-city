@@ -228,7 +228,12 @@ function index(ctx, { categories = [], groups = {}, latestPosts = [], onlineData
                       ${isEnglishServer ? html`
                         <div class="fc-subforums-wrap">
                           <span class="fc-subforums-label">Sub-forums <span class="arrow-down">▾</span></span>
-                          <span class="fc-subforums-items">Role Play biographies &middot; Corrupt Bio &middot; Applications &middot; Complaints</span>
+                          <span class="fc-subforums-items">
+                            <a href="/forum/roleplay-biographies">Role Play biographies</a> &middot;
+                            <a href="/forum/bio-corrupt">Corrupt Bio</a> &middot;
+                            <a href="/forum/application">Applications</a> &middot;
+                            <a href="/forum/complaints">Complaints</a>
+                          </span>
                         </div>
                       ` : ''}
                       ${c.description ? html`<p class="fc-cat-desc muted">${c.description}</p>` : ''}
