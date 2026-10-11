@@ -310,7 +310,7 @@ function index(ctx, { categories = [], groups = {}, latestPosts = [], onlineData
                       }
                     </div>
                     <div class="fc-post-info">
-                      <a class="fc-post-title-link" href="/forum/thread/${p.id}">
+                      <a class="fc-post-title-link" href="/forum/thread/${p.id}#post-${p.post_id}">
                         ${threadStatusBadge(p.status || (p.title.toLowerCase().includes('important') ? 'IMPORTANT' : p.title.toLowerCase().includes('approved') ? 'Approved' : ''))}
                         <span class="fc-post-title-text">${p.title.replace(/^\[(IMPORTANT|Approved|Pending)\]\s*/i, '')}</span>
                       </a>
@@ -326,28 +326,7 @@ function index(ctx, { categories = [], groups = {}, latestPosts = [], onlineData
               </ul>
             ` : html`
               <ul class="fc-latest-posts-list">
-                <li class="fc-latest-post-item">
-                  <div class="fc-post-avatar"><span>R</span></div>
-                  <div class="fc-post-info">
-                    <a class="fc-post-title-link" href="/forum">
-                      <span class="forum-tag tag-important">IMPORTANT</span>
-                      <span class="fc-post-title-text">Personal Biography | Name | ID</span>
-                    </a>
-                    <div class="fc-post-author-line muted">Latest: Rafay Royal &middot; Today at 9:04 PM</div>
-                    <div class="fc-post-cat-line"><a href="/forum">Role Play biographies</a></div>
-                  </div>
-                </li>
-                <li class="fc-latest-post-item">
-                  <div class="fc-post-avatar"><span>M</span></div>
-                  <div class="fc-post-info">
-                    <a class="fc-post-title-link" href="/forum">
-                      <span class="forum-tag tag-important">IMPORTANT</span>
-                      <span class="fc-post-title-text">(State organization) Corrupt Bio</span>
-                    </a>
-                    <div class="fc-post-author-line muted">Latest: Marshmello Plux &middot; Sunday at 4:35 PM</div>
-                    <div class="fc-post-cat-line"><a href="/forum">Role Play biographies</a></div>
-                  </div>
-                </li>
+                <li class="fc-latest-post-item"><p class="muted">No posts yet.</p></li>
               </ul>
             `}
           </div>

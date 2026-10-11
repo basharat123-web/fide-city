@@ -60,15 +60,16 @@ const q = {
     SELECT t.id, t.title, t.status, t.updated_at, u.username, u.avatar FROM threads t JOIN users u ON u.id = t.user_id
     WHERE t.category_id = ? AND t.deleted = 0 ORDER BY t.updated_at DESC LIMIT 1`),
   latestPosts: db.prepare(`
-    SELECT t.id, t.title, t.status, t.reply_count, t.updated_at,
+    SELECT t.id, p.id AS post_id, t.title, t.status, t.reply_count, p.created_at AS updated_at,
            c.name AS category_name, c.slug AS category_slug,
            u.username, u.role, u.staff_title, u.additional_title, u.avatar
-    FROM threads t
+    FROM posts p
+    JOIN threads t ON t.id = p.thread_id
     JOIN categories c ON c.id = t.category_id
-    JOIN users u ON u.id = t.user_id
-    WHERE t.deleted = 0 AND (c.staff_only = 0 OR ? = 1)
-    ORDER BY t.updated_at DESC
-    LIMIT 8`),
+    JOIN users u ON u.id = p.user_id
+    WHERE p.deleted = 0 AND t.deleted = 0 AND (c.staff_only = 0 OR ? = 1)
+    ORDER BY p.created_at DESC, p.id DESC
+    LIMIT 5`),
   cat: db.prepare('SELECT * FROM categories WHERE slug = ?'),
   threadCount: db.prepare('SELECT COUNT(*) AS n FROM threads WHERE category_id = ? AND deleted = 0'),
   threads: db.prepare(`
@@ -169,7 +170,12 @@ get('/forum', async (ctx) => {
     groups[gName].push(c);
   }
 
-  const latestPosts = q.latestPosts.all(staff);
+  let latestPosts = q.latestPosts.all(staff);
+  if (cloudForum()) {
+    const { getLatestForumPosts } = require('../lib/supabase');
+    const visibleCategories = db.prepare('SELECT * FROM categories WHERE staff_only = 0 OR ? = 1').all(staff);
+    latestPosts = await getLatestForumPosts(visibleCategories, 5);
+  }
   const onlineData = getOnlineUsers(ctx.user);
 
   ctx.html(view.index(ctx, { categories, groups, latestPosts, onlineData }));

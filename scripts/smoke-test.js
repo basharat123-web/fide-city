@@ -173,6 +173,12 @@ async function main() {
     check('title markup is escaped', view.text.includes('Hello &lt;b&gt;city&lt;/b&gt;') && !view.text.includes('Hello <b>city</b>'));
     check('event handler attribute cannot execute', !/<img src=x onerror/.test(view.text));
     const firstPostId = db.prepare('SELECT MIN(id) AS id FROM posts WHERE thread_id = ?').get(Number(threadUrl.split('/').pop())).id;
+    const forumHomeAfterPost = await player.get('/forum');
+    const latestList = /<ul class="fc-latest-posts-list">([\s\S]*?)<\/ul>/.exec(forumHomeAfterPost.text);
+    check('latest posts show real latest thread and post link', forumHomeAfterPost.status === 200 && latestList &&
+      latestList[1].includes(`href="${threadUrl}#post-${firstPostId}"`) &&
+      latestList[1].includes('Hello &lt;b&gt;city&lt;/b&gt;'));
+    check('latest posts widget is limited to five real posts', latestList && (latestList[1].match(/<li class="fc-latest-post-item">/g) || []).length <= 5);
     const memberEdit = await player.get(`/forum/post/${firstPostId}/edit`);
     check('members cannot open post editor', memberEdit.status === 404);
     const memberEditPost = await player.post(`/forum/post/${firstPostId}/edit`, {

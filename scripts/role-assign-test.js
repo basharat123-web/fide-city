@@ -60,7 +60,7 @@ function testSupabaseRolePersistence() {
   const supabaseModule = path.join(__dirname, '..', 'lib', 'supabase.js');
   const script = `
     const assert = require('node:assert/strict');
-    const { supabase, updateUserRole, getForumThreadRecord } = require(${JSON.stringify(supabaseModule)});
+    const { supabase, updateUserRole, getForumThreadRecord, getLatestForumPosts } = require(${JSON.stringify(supabaseModule)});
     const updates = [];
     supabase.from = () => ({
       update(payload) {
@@ -122,6 +122,69 @@ function testSupabaseRolePersistence() {
       assert.equal(authorSelections.length, 3, 'Missing optional author columns trigger compatibility retries');
       assert.ok(!authorSelections[1].includes('additional_title'));
       assert.ok(!authorSelections[2].includes('avatar'));
+
+      const latestCalls = [];
+      const latestCategories = [
+        { id: 3, slug: 'admin-application', name: 'Admin Application' },
+        { id: 4, slug: 'leader-application', name: 'Leader Application' },
+      ];
+      const latestRows = Array.from({ length: 5 }, (_, index) => ({
+        id: 100 + index,
+        thread_id: 20 + index,
+        user_id: 10 + index,
+        created_at: now - index,
+        threads: {
+          id: 20 + index,
+          category_id: index % 2 ? 4 : 3,
+          title: 'Latest form ' + index,
+          status: null,
+          reply_count: index,
+          deleted: 0,
+        },
+      }));
+      supabase.from = (table) => {
+        let selection = '';
+        let requestedLimit = null;
+        const filters = [];
+        const builder = {
+          select(value) { selection = value; return builder; },
+          in(column, values) { filters.push({ column, values }); return builder; },
+          eq(column, value) { filters.push({ column, value }); return builder; },
+          order() { return builder; },
+          limit(value) { requestedLimit = value; return builder; },
+          then(resolve, reject) {
+            latestCalls.push({ table, selection, requestedLimit, filters });
+            const data = table === 'categories'
+              ? latestCategories
+              : table === 'posts'
+                ? latestRows
+                : table === 'users'
+                  ? latestRows.map((row) => ({
+                      id: row.user_id,
+                      username: 'author-' + row.user_id,
+                      role: 'member',
+                      staff_title: 'EN | Player',
+                    }))
+                  : null;
+            return Promise.resolve({ data, error: null }).then(resolve, reject);
+          },
+        };
+        return builder;
+      };
+      const latestPosts = await getLatestForumPosts([
+        { slug: 'admin-application' },
+        { slug: 'leader-application' },
+      ]);
+      assert.equal(latestPosts.length, 5);
+      assert.equal(latestPosts[0].post_id, 100);
+      assert.equal(latestPosts[0].id, 20);
+      assert.equal(latestPosts[0].username, 'author-10');
+      assert.equal(latestPosts[0].category_slug, 'admin-application');
+      assert.equal(latestCalls.find((call) => call.table === 'posts').requestedLimit, 5);
+      assert.deepEqual(latestCalls.find((call) => call.table === 'posts').filters[0], {
+        column: 'threads.category_id',
+        values: [3, 4],
+      });
     })().catch((error) => {
       console.error(error);
       process.exitCode = 1;
