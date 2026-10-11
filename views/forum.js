@@ -19,14 +19,6 @@ const roleBadge = (u) => {
   `;
 };
 
-function threadStatusBadge(status) {
-  if (!status) return '';
-  if (status === 'Approved') return html`<span class="badge" style="background: rgba(34, 197, 94, 0.18); border: 1.5px solid #22c55e; color: #4ade80; font-weight: 800; font-size: 0.75rem; margin-right: 0.4rem;">✅ Approved</span>`;
-  if (status === 'Rejected') return html`<span class="badge" style="background: rgba(239, 68, 68, 0.18); border: 1.5px solid #ef4444; color: #f87171; font-weight: 800; font-size: 0.75rem; margin-right: 0.4rem;">❌ Rejected</span>`;
-  if (status === 'Pending Review') return html`<span class="badge" style="background: rgba(234, 179, 8, 0.18); border: 1.5px solid #eab308; color: #facc15; font-weight: 800; font-size: 0.75rem; margin-right: 0.4rem;">⏳ Pending Review</span>`;
-  return html`<span class="badge badge-quiet" style="font-size: 0.75rem; margin-right: 0.4rem;">${status}</span>`;
-}
-
 function fmtForumTime(ts) {
   if (!ts) return 'None';
   const d = new Date(Number(ts));
